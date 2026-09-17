@@ -77,3 +77,30 @@ class RandomController(AgentController):
             rotate_dir=random.choice([-1.0, 0.0, 1.0]),
             fire=random.random() < 0.05
         )
+
+
+class ActionDecoder:
+    MOVE_MAP = {
+        0: (0.0, 0.0),   # Dur
+        1: (1.0, 0.0),   # İleri
+        2: (-1.0, 0.0),  # Geri
+        3: (0.0, -1.0),  # Sola
+        4: (0.0, 1.0),   # Sağa
+    }
+
+    ROTATE_MAP = {
+        0: 0.0,   # Sabit
+        1: -1.0,  # Sola Dön
+        2: 1.0,   # Sağa Dön
+    }
+
+    @staticmethod
+    def decode(action_indices: Tuple[int, int]) -> Tuple[float, float, float]:
+        """
+        action_indices: (move_idx, rotate_idx)
+        Döndürür: (move_fwd, strafe, rotate_dir)
+        """
+        move_idx, rot_idx = action_indices
+        fwd, strafe = ActionDecoder.MOVE_MAP.get(int(move_idx), (0.0, 0.0))
+        rot = ActionDecoder.ROTATE_MAP.get(int(rot_idx), 0.0)
+        return (fwd, strafe, rot)
