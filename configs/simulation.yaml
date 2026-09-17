@@ -1,0 +1,5 @@
+physics:
+  # Fizik döngüsü frekansı (1 saniyede kaç adım atılacak)
+  tick_rate: 60.0
+  # Duvar köşelerinde batmayı engellemek için çarpışma çözüm iterasyonu
+  collision_iterations: 2

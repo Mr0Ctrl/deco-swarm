@@ -1,0 +1,10 @@
+screen:
+  width: 1024
+  height: 720
+  fps: 60
+  title: "DECO-SWARM | Taktiksel Simülasyon Sahası"
+
+camera:
+  default_zoom: 0.75
+  min_zoom: 0.2
+  max_zoom: 4.0
