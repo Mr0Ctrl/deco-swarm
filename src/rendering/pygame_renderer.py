@@ -49,18 +49,17 @@ class PygameRenderer:
         self.map_drawer.draw(
             surface=self.screen,
             camera=camera,
-            segments=world.segments,
+            segments=world.map.segments,
         )
 
         # C) Işınlar (Rays)
-        for agent_id, agent in world.agents.items():
-            rays = world.latest_rays.get(agent_id, [])
+        for agent in world.agents.values():
             self.ray_drawer.draw(
                 ray_surface=self.overlay_surface,
                 hit_surface=self.screen,
                 camera=camera,
                 agent_pos=agent.position,
-                rays=rays,
+                rays=agent.rays,
             )
 
         # D) Ajanlar (Agents)
