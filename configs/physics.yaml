@@ -1,7 +1,7 @@
 screen:
   width: 1280
   height: 720
-  fps: 6000
+  fps: 60
 
 agent:
   radius: 10.0 # Piksel cinsinden ajan gövde yarıçapı
@@ -11,4 +11,4 @@ agent:
 raycast:
   ray_count: 90 # Test edeceğimiz ışın sayısı
   fov_degrees: 180.0 # Görüş açısı genişliği
-  max_distance: 300.0 # Işınların maksimum menzili
+  max_distance: 500.0 # Işınların maksimum menzili
