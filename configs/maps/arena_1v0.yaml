@@ -1,0 +1,30 @@
+# configs/maps/arena_1v0.yaml
+name: "Arena 1v0 - U-Labirent"
+
+dimensions:
+  width: 1400
+  height: 1000
+
+# Ajanların doğuş noktaları: [x, y, başlangıç_açısı_derece]
+spawns:
+  agent_0: [200.0, 250.0, 0.0]
+
+# Hedef Bölgesi: [x, y, yarıçap]
+goal:
+  position: [1200.0, 750.0]
+  radius: 32.0
+
+# İç Duvarlar ve Engeller
+walls:
+  # Serbest çizgi parçaları: [[x1, y1], [x2, y2]]
+  segments:
+    # Ortadaki dikey engel
+    - [[700.0, 150.0], [700.0, 700.0]]
+    # U şeklinin alt kanadı
+    - [[700.0, 700.0], [450.0, 700.0]]
+    # Açılı bir taktiksel siper
+    - [[1000.0, 300.0], [1250.0, 450.0]]
+
+  # Kutu siperler: [x, y, genişlik, yükseklik]
+  boxes:
+    - [350.0, 350.0, 100.0, 100.0]
