@@ -49,14 +49,17 @@ class World:
 
     def step(self, actions: Dict[str, Tuple[float, float, float]], dt: float):
         """
-        1. Hareketi uygula
-        2. Çarpışmaları çöz (collision modülü ile)
-        3. Ajanların gözlerini ve pusulalarını güncelle
+        actions: {'agent_0': (move_fwd, strafe, rotate_dir)}
         """
-        # 1. Hareket
+        # 1. Hareket ve İç Durum Güncellemesi
         for agent_id, agent in self.agents.items():
             if agent_id in actions:
                 move_fwd, strafe, rotate_dir = actions[agent_id]
+
+                # Ajanın hafızasını güncelle (a_{t-1} ve anlık hız)
+                agent.last_action = (move_fwd, strafe, rotate_dir)
+                agent.current_vel = (move_fwd, strafe, rotate_dir)
+
                 agent.rotate(rotate_dir, dt)
                 agent.move(move_fwd, strafe, dt)
 
@@ -68,7 +71,7 @@ class World:
                     new_pos, _ = resolve_circle_segment(agent.position, agent.radius, seg)
                     agent.set_position(new_pos)
 
-        # 3. Ajanların kendi durumlarını güncelle
+        # 3. Gözlem ve Algıları Güncelle
         self._update_perceptions()
 
     def _update_perceptions(self):

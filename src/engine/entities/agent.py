@@ -1,7 +1,8 @@
 # src/engine/entities/agent.py
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Tuple
+import numpy as np
 from engine.core.geometry import Point2D, wrap_angle_deg
 
 
@@ -9,8 +10,15 @@ from engine.core.geometry import Point2D, wrap_angle_deg
 class RayHit:
     endpoint: Point2D
     distance: float
-    norm_distance: float  # [0.0, 1.0] (RL için normalize)
+    norm_distance: float       # [0.0, 1.0]
     has_hit: bool
+    # Gelecek için genişletilmiş varlık özellikleri
+    is_wall: float = 1.0
+    is_friend: float = 0.0
+    is_enemy: float = 0.0
+    is_objective: float = 0.0
+    rel_cos: float = 0.0       # Görülen ajanın cos açısı (duvarsa 0.0)
+    rel_sin: float = 0.0       # Görülen ajanın sin açısı (duvarsa 0.0)
 
 
 class Agent:
@@ -32,12 +40,17 @@ class Agent:
         self.radius = radius
         self.linear_speed = linear_speed
         self.angular_speed = angular_speed
+        self.max_health = health
         self.health = health
+        self.ammo = 1.0  # Normalize mermi durumu
 
-        # --- AJANIN KENDİ ALGI DURUMU (State) ---
-        # Artık world sözlüklerinde savrulmuyor, ajana ait birer özellik:
+        # --- ALGI DURUMU ---
         self.rays: List[RayHit] = []
         self.polar_target: Tuple[float, float] = (1.0, 0.0)  # (norm_dist, norm_angle)
+
+        # --- İÇ KİNEMATİK VE ÖNCEKİ AKSİYON (a_{t-1}) ---
+        self.current_vel = (0.0, 0.0, 0.0)  # (v_ileri, v_yan, omega_donus) [-1, 1]
+        self.last_action = (0.0, 0.0, 0.0)  # Önceki hareket kararı
 
     @property
     def position(self) -> Point2D:
@@ -47,16 +60,19 @@ class Agent:
         self.x, self.y = pos
 
     def rotate(self, direction: float, dt: float):
-        """direction: -1.0 (Sol), +1.0 (Sağ), 0.0 (Sabit)"""
         self.angle_deg = wrap_angle_deg(self.angle_deg + direction * self.angular_speed * dt)
 
     def move(self, move_forward: float, strafe_right: float, dt: float):
-        """İleri/Geri ve Sağa/Sola kayma hareketlerini uygular."""
+        # ÇAPRAZ HIZ HATASI DÜZELTMESİ (Quake Strafe-Run Fix):
+        # Bileşke kuvvet 1.0'dan büyükse birim vektöre normalize et
+        mag = math.hypot(move_forward, strafe_right)
+        if mag > 1.0:
+            move_forward /= mag
+            strafe_right /= mag
+
         rad = math.radians(self.angle_deg)
         forward_x = math.cos(rad)
         forward_y = math.sin(rad)
-
-        # Sağa dik vektör
         right_x = -forward_y
         right_y = forward_x
 
@@ -65,3 +81,72 @@ class Agent:
 
         self.x += vx * dt
         self.y += vy * dt
+
+    def get_observation(self) -> np.ndarray:
+        """
+        Model için 640 Float'lık resmi Ego-Merkezli Gözlem Vektörünü üretir:
+          - 90 Ray x 7 Kanal = 630 Float
+          - Polar Hedef (r, d_theta) = 2 Float
+          - Kendi Hızları (v_x, v_y, omega) = 3 Float
+          - Önceki Aksiyon (a_{t-1}) = 3 Float
+          - Öz Durum (Can, Mermi) = 2 Float
+        """
+        obs = []
+
+        # 1. Raycast Bloğu (90 x 7 = 630)
+        for ray in self.rays:
+            obs.extend([
+                ray.norm_distance,
+                ray.is_wall if ray.has_hit else 0.0,
+                ray.is_friend,
+                ray.is_enemy,
+                ray.is_objective,
+                ray.rel_cos,
+                ray.rel_sin,
+            ])
+
+        # 2. Polar Hedef (2)
+        obs.extend([self.polar_target[0], self.polar_target[1]])
+
+        # 3. Kendi Hızları / Odometri (3)
+        obs.extend([self.current_vel[0], self.current_vel[1], self.current_vel[2]])
+
+        # 4. Önceki Aksiyon (3)
+        obs.extend([self.last_action[0], self.last_action[1], self.last_action[2]])
+
+        # 5. Öz Durum (2)
+        norm_health = max(0.0, min(1.0, self.health / self.max_health))
+        obs.extend([norm_health, self.ammo])
+
+        return np.array(obs, dtype=np.float32)
+
+
+    # src/engine/controllers.py dosyasına eklenecek:
+
+# src/engine/controllers.py içindeki ActionDecoder:
+
+class ActionDecoder:
+    MOVE_MAP = {
+        0: (0.0, 0.0),   # Dur
+        1: (1.0, 0.0),   # İleri
+        2: (-1.0, 0.0),  # Geri
+        3: (0.0, -1.0),  # Sola
+        4: (0.0, 1.0),   # Sağa
+    }
+
+    ROTATE_MAP = {
+        0: 0.0,   # Sabit
+        1: -1.0,  # Sola Dön
+        2: 1.0,   # Sağa Dön
+    }
+
+    @staticmethod
+    def decode(action_indices: Tuple[int, int]) -> Tuple[float, float, float]:
+        """
+        action_indices: (move_idx, rotate_idx)
+        Döndürür: (move_fwd, strafe, rotate_dir)
+        """
+        move_idx, rot_idx = action_indices
+        fwd, strafe = ActionDecoder.MOVE_MAP.get(int(move_idx), (0.0, 0.0))
+        rot = ActionDecoder.ROTATE_MAP.get(int(rot_idx), 0.0)
+        return (fwd, strafe, rot)
