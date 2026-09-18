@@ -3,3 +3,7 @@ physics:
   tick_rate: 60.0
   # Duvar köşelerinde batmayı engellemek için çarpışma çözüm iterasyonu
   collision_iterations: 2
+
+episode:
+  # Bir RL bölümünün (episode) hedefe ulaşmadan zorla biteceği adım sayısı
+  max_steps: 500

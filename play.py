@@ -6,11 +6,11 @@ import pygame
 
 sys.path.insert(0, os.path.abspath("src"))
 
-from engine.map_loader import MapLoader
-from engine.world import World
-from engine.controllers import KeyboardController
-from rendering.camera import Camera
-from rendering.pygame_renderer import PygameRenderer
+from src.engine.map_loader import MapLoader
+from src.engine.world import World
+from src.engine.controllers import KeyboardController
+from src.rendering.camera import Camera
+from src.rendering.pygame_renderer import PygameRenderer
 
 
 def load_yaml(path: str):

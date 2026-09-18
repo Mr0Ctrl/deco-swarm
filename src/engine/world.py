@@ -26,6 +26,7 @@ class World:
         self.max_map_distance: float = math.hypot(map_config.width, map_config.height)
 
         self.agents: Dict[str, Agent] = {}
+        self.last_collisions: Dict[str, bool] = {}
         self.reset()
 
     def reset(self):
@@ -64,12 +65,15 @@ class World:
                 agent.move(move_fwd, strafe, dt)
 
         # 2. Çarpışma Çözümü (Fizik motoru adımı)
+        self.last_collisions = {agent_id: False for agent_id in self.agents}
         iterations = self.sim_config["physics"].get("collision_iterations", 2)
         for _ in range(iterations):
-            for agent in self.agents.values():
+            for agent_id, agent in self.agents.items():
                 for seg in self.map.segments:
-                    new_pos, _ = resolve_circle_segment(agent.position, agent.radius, seg)
+                    new_pos, collided = resolve_circle_segment(agent.position, agent.radius, seg)
                     agent.set_position(new_pos)
+                    if collided:
+                        self.last_collisions[agent_id] = True
 
         # 3. Gözlem ve Algıları Güncelle
         self._update_perceptions()
