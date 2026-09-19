@@ -1,0 +1,31 @@
+# configs/maps/arena_1v0_mirrored_x.yaml
+name: "faz1v2.2 maze 3*3 mirX"
+
+dimensions:
+  width: 1300
+  height: 900
+
+# Ajanların doğuş noktaları: [x, y, başlangıç_açısı_derece]
+# Başlangıç açısı da simetriye uygun olarak 180° döndürülmelidir.
+spawns:
+  agent_0: [100, 450, 0.0]
+
+# Hedef Bölgesi: [x, y, yarıçap]
+goal:
+  position: [1200.0, 450.0]
+  radius: 32.0
+
+# İç Duvarlar ve Engeller
+walls:
+  segments:
+    - [[200, 900], [200, 600]]
+    - [[200, 300], [200, 0]]
+
+    - [[500, 900], [500, 600]]
+    - [[500, 300], [800, 300]]
+
+    - [[800, 600], [800, 300]]
+    - [[800, 600], [1100, 600]]
+
+    - [[1100, 900], [1100, 600]]
+    - [[1100, 300], [1100, 0]]

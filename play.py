@@ -23,7 +23,7 @@ def main():
     render_cfg = load_yaml("configs/render.yaml")
     sim_cfg = load_yaml("configs/simulation.yaml")
     agent_cfg = load_yaml("configs/agent.yaml")
-    map_cfg = MapLoader.load("configs/maps/arena_1v0.yaml")
+    map_cfg = MapLoader.load("configs/maps/faz_1v2.6.yaml")
 
     # 2. Dünyayı Başlat
     world = World(map_config=map_cfg, sim_config=sim_cfg, agent_config=agent_cfg)

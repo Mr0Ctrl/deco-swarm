@@ -1,0 +1,38 @@
+# configs/maps/arena_1v0.yaml
+name: "faz1v2.3 maze 4*4"
+
+dimensions:
+  width: 1400
+  height: 1000
+
+# Ajanların doğuş noktaları: [x, y, başlangıç_açısı_derece]
+spawns:
+  agent_0: [100, 500, 0.0]
+
+# Hedef Bölgesi: [x, y, yarıçap]
+goal:
+  position: [1300.0, 500.0]
+  radius: 32.0
+
+# İç Duvarlar ve Engeller
+walls:
+  # Serbest çizgi parçaları: [[x1, y1], [x2, y2]]
+  segments:
+    - [[200, 1000], [200, 500]]
+    - [[200, 250], [200, 0]]
+    - [[200, 250], [450, 250]]
+
+    - [[450, 1000], [450, 500]]
+    - [[450, 500], [700, 500]]
+
+    - [[700, 250], [700, 0]]
+    - [[700, 750], [950, 750]]
+
+    - [[950, 500], [1200, 500]]
+    - [[950, 750], [950, 250]]
+
+    - [[1200, 1000], [1200, 750]]
+    - [[1200, 500], [1200, 0]]
+
+  # # Kutu siperler: [x, y, genişlik, yükseklik]
+  # boxes:
