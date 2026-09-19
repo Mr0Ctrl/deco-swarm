@@ -1,0 +1,25 @@
+# configs/maps/arena_1v0.yaml
+name: "faz1v1.1 two box"
+
+dimensions:
+  width: 1000
+  height: 1000
+
+# Ajanların doğuş noktaları: [x, y, başlangıç_açısı_derece]
+spawns:
+  agent_0: [200.0, 200.0, 45.0]
+
+# Hedef Bölgesi: [x, y, yarıçap]
+goal:
+  position: [800.0, 800.0]
+  radius: 32.0
+
+# İç Duvarlar ve Engeller
+walls:
+  # # Serbest çizgi parçaları: [[x1, y1], [x2, y2]]
+  # segments:
+
+  # Kutu siperler: [x, y, genişlik, yükseklik]
+  boxes:
+    - [300, 500, 200, 200]
+    - [500, 300, 200, 200]

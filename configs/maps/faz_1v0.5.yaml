@@ -1,0 +1,27 @@
+# configs/maps/arena_1v0.yaml
+name: "faz1v0.5 V lines"
+
+dimensions:
+  width: 1000
+  height: 1000
+
+# Ajanların doğuş noktaları: [x, y, başlangıç_açısı_derece]
+spawns:
+  agent_0: [200.0, 200.0, 45.0]
+
+# Hedef Bölgesi: [x, y, yarıçap]
+goal:
+  position: [800.0, 800.0]
+  radius: 32.0
+
+# İç Duvarlar ve Engeller
+walls:
+  # Serbest çizgi parçaları: [[x1, y1], [x2, y2]]
+  segments:
+    - [[200, 800], [400, 600]]
+    - [[600, 400], [800, 200]]
+    - [[200, 500], [500, 200]]
+    - [[500, 800], [800, 500]]
+
+  # # Kutu siperler: [x, y, genişlik, yükseklik]
+  # boxes:
