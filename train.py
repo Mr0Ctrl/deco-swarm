@@ -98,7 +98,7 @@ def main():
         ent_coef=args.ent_coef,
     )
 
-    # 4. Prepare initial state
+    # 4. Prepare initial state & Best Model Tracking
     obs_dict, _ = env.reset()
     current_obs = torch.tensor(obs_dict["agent_0"], dtype=torch.float32, device=device)
     current_hidden = model.initial_hidden_state(batch_size=1, device=device)
@@ -106,6 +106,12 @@ def main():
     start_time = time.time()
     last_save_step = 0
     iteration = 0
+
+    # Catastrophic failure protection trackers
+    best_success_rate = 0.0
+    best_avg_steps = 9999.0
+    best_model_state = None
+    min_episodes_for_peak = 15
 
     print(f"\n[Curriculum Starting] Active Tier: {curriculum.current_tier.name} | Map: {curriculum.current_map_name}\n")
 
@@ -122,19 +128,65 @@ def main():
         iter_time = time.time() - iter_start
         fps = int(args.rollout_steps / max(1e-5, iter_time))
 
+        succ_rate = curriculum.success_rate
+        avg_steps = curriculum.avg_steps
+
         # Log progress
         print(
             f"[Step {trainer.global_step:6d}/{args.total_timesteps}] "
             f"Tier: {curriculum.current_tier.tier_id} ({curriculum.current_map_name}) | "
-            f"Success: {curriculum.success_rate:5.1%} | "
-            f"AvgSteps: {curriculum.avg_steps:5.1f} | "
+            f"Success: {succ_rate:5.1%} | "
+            f"AvgSteps: {avg_steps:5.1f} | "
             f"PiLoss: {train_metrics['policy_loss']:+6.3f} | "
             f"VLoss: {train_metrics['value_loss']:5.3f} | "
             f"Ent: {train_metrics['entropy']:4.2f} | "
             f"FPS: {fps}"
         )
 
-        # Checkpoint saving
+        # 1. Best Model Tracking (Protection Rule A: Save peak performance)
+        is_new_best = False
+        if len(curriculum.recent_successes) >= min_episodes_for_peak:
+            if succ_rate > best_success_rate or (succ_rate == best_success_rate and avg_steps < best_avg_steps and succ_rate > 0.0):
+                best_success_rate = succ_rate
+                best_avg_steps = avg_steps
+                is_new_best = True
+                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+
+                best_path = os.path.join(args.save_dir, "model_best.pt")
+                tier_best_path = os.path.join(args.save_dir, f"model_best_tier_{curriculum.current_tier.tier_id}.pt")
+
+                checkpoint_best = {
+                    "step": trainer.global_step,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": trainer.optimizer.state_dict(),
+                    "tier_idx": curriculum.current_tier_idx,
+                    "map_idx": curriculum.current_map_idx,
+                    "success_rate": best_success_rate,
+                    "avg_steps": best_avg_steps,
+                }
+                torch.save(checkpoint_best, best_path)
+                torch.save(checkpoint_best, tier_best_path)
+                print(f"  [BEST MODEL] New peak ({best_success_rate:.1%})! Saved to {best_path}")
+
+        # 2. Catastrophic Collapse Detection & Rollback (Protection Rule B)
+        if best_success_rate >= 0.50 and succ_rate <= 0.15 and best_model_state is not None:
+            print(
+                f"\n  [ALERT: CATASTROPHIC COLLAPSE DETECTED] Success dropped from {best_success_rate:.1%} to {succ_rate:.1%}!"
+            )
+            print("  >>> Rolling back model to peak weights (model_best.pt) and annealing learning rate by 50%...")
+            model.load_state_dict({k: v.to(device) for k, v in best_model_state.items()})
+
+            # Decay learning rate to prevent jumping off loss cliffs again
+            for param_group in trainer.optimizer.param_groups:
+                param_group["lr"] *= 0.5
+                current_lr = param_group["lr"]
+            print(f"  >>> Resumed with annealed LR: {current_lr:.6f}\n")
+
+            # Reset degraded statistics to allow healthy recovery
+            curriculum.recent_successes.clear()
+            curriculum.recent_steps.clear()
+
+        # 3. Periodic Checkpoint Saving
         if trainer.global_step - last_save_step >= args.save_interval:
             save_path = os.path.join(args.save_dir, f"model_step_{trainer.global_step}.pt")
             latest_path = os.path.join(args.save_dir, "model_latest.pt")
@@ -144,26 +196,51 @@ def main():
                 "optimizer_state_dict": trainer.optimizer.state_dict(),
                 "tier_idx": curriculum.current_tier_idx,
                 "map_idx": curriculum.current_map_idx,
+                "success_rate": succ_rate,
+                "avg_steps": avg_steps,
             }
             torch.save(checkpoint, save_path)
             torch.save(checkpoint, latest_path)
             last_save_step = trainer.global_step
-            print(f"  >>> Checkpoint saved to {save_path}")
+            print(f"  >>> Checkpoint saved to {save_path} & {latest_path}")
 
-    # Final save
+    # Final save (Protection Rule C: Guarantee model_final.pt is safe and healthy)
     final_path = os.path.join(args.save_dir, "model_final.pt")
-    torch.save(
-        {
+    latest_path = os.path.join(args.save_dir, "model_latest.pt")
+
+    # Save the absolute latest state
+    checkpoint_latest = {
+        "step": trainer.global_step,
+        "model_state_dict": model.state_dict(),
+        "tier_idx": curriculum.current_tier_idx,
+        "map_idx": curriculum.current_map_idx,
+        "success_rate": curriculum.success_rate,
+        "avg_steps": curriculum.avg_steps,
+    }
+    torch.save(checkpoint_latest, latest_path)
+
+    # If the latest step severely degraded from peak, preserve best model as model_final.pt
+    if best_model_state is not None and (curriculum.success_rate < best_success_rate - 0.25):
+        print("\n  [SAFE FINAL RULE] Final step policy is degraded compared to peak!")
+        print(f"  >>> Protecting model_final.pt: Saving peak weights ({best_success_rate:.1%}) as model_final.pt.")
+        checkpoint_final = {
             "step": trainer.global_step,
-            "model_state_dict": model.state_dict(),
+            "model_state_dict": {k: v.to(device) for k, v in best_model_state.items()},
             "tier_idx": curriculum.current_tier_idx,
             "map_idx": curriculum.current_map_idx,
-        },
-        final_path,
-    )
+            "success_rate": best_success_rate,
+            "avg_steps": best_avg_steps,
+        }
+        torch.save(checkpoint_final, final_path)
+    else:
+        torch.save(checkpoint_latest, final_path)
+
     total_time = time.time() - start_time
     print("\n" + "=" * 65)
-    print(f"Training completed in {total_time:.1f}s | Final Model saved to {final_path}")
+    print(f"Training completed in {total_time:.1f}s")
+    print(f"  - Peak Model:     {os.path.join(args.save_dir, 'model_best.pt')}")
+    print(f"  - Final Model:    {final_path}")
+    print(f"  - Latest Model:   {latest_path}")
     print("=" * 65)
 
 
