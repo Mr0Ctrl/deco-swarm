@@ -26,6 +26,8 @@ def parse_args():
     parser.add_argument("--save-interval", type=int, default=10000, help="Timesteps between saving checkpoints")
     parser.add_argument("--save-dir", type=str, default="checkpoints", help="Directory to save checkpoints")
     parser.add_argument("--resume", type=str, default="", help="Path to checkpoint (.pt) to resume training from")
+    parser.add_argument("--tier", type=int, default=-1, help="Force curriculum tier (0 for faz_1v0.*, 1 for faz_1v1.*, etc.)")
+    parser.add_argument("--lock-tier", action="store_true", help="Lock the chosen tier (prevent promotion/demotion)")
     parser.add_argument("--device", type=str, default="auto", help="Device: cuda, cpu, or auto")
     return parser.parse_args()
 
@@ -53,6 +55,8 @@ def main():
     print(f"Checkpoints:      {args.save_dir}/")
     if args.resume:
         print(f"Resuming From:    {args.resume}")
+    if args.tier >= 0:
+        print(f"Enforced Tier:    Tier {args.tier} {'(LOCKED)' if args.lock_tier else '(Auto-promote enabled)'}")
     print("=" * 65)
 
     os.makedirs(args.save_dir, exist_ok=True)
@@ -74,6 +78,11 @@ def main():
         else:
             model.load_state_dict(checkpoint)
         print("[Resume] Weights restored successfully.\n")
+
+    # Override tier if user explicitly specified --tier
+    if args.tier >= 0:
+        curriculum.set_tier(args.tier, locked=args.lock_tier)
+        print(f"[Tier Enforced] Active Tier set to: {curriculum.current_tier.name} (Locked: {args.lock_tier})\n")
 
     # 3. Initialize Trainer
     trainer = PPOTrainer(

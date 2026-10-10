@@ -74,7 +74,7 @@ class MapCurriculum:
         tiers: Optional[List[TierConfig]] = None,
         sample_mode: str = "random",
         window_size: int = 30,
-        promotion_threshold: float = 0.85,
+        promotion_threshold: float = 0.95,
         demotion_threshold: float = 0.20,
         min_episodes_before_promotion: int = 30,
     ):
@@ -87,6 +87,7 @@ class MapCurriculum:
 
         self.current_tier_idx = 0
         self.current_map_idx = 0
+        self.locked = False  # If True, curriculum does not promote or demote
 
         self.recent_successes: deque = deque(maxlen=window_size)
         self.recent_steps: deque = deque(maxlen=window_size)
@@ -95,6 +96,15 @@ class MapCurriculum:
 
         # Currently active map path for this episode
         self._active_map_path = self.current_tier.maps[0]
+
+    def set_tier(self, tier_idx: int, locked: bool = False):
+        """Forces the curriculum to a specific tier, optionally locking it."""
+        self.current_tier_idx = max(0, min(tier_idx, len(self.tiers) - 1))
+        self.locked = locked
+        self._active_map_path = self.current_tier.maps[0]
+        self.recent_successes.clear()
+        self.recent_steps.clear()
+        self.episodes_in_current_level = 0
 
     @property
     def current_tier(self) -> TierConfig:
@@ -144,7 +154,8 @@ class MapCurriculum:
         demoted = False
 
         if (
-            self.episodes_in_current_level >= self.min_episodes_before_promotion
+            not self.locked
+            and self.episodes_in_current_level >= self.min_episodes_before_promotion
             and len(self.recent_successes) >= self.window_size
         ):
             if self.success_rate >= self.promotion_threshold:
