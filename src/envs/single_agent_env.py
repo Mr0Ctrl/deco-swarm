@@ -134,7 +134,7 @@ class SingleAgentMazeEnv(ParallelEnv):
 
         # 1. Update map from curriculum if it changed
         target_map = (
-            self.curriculum.current_map_path if self.curriculum else self.current_map_path
+            self.curriculum.get_episode_map() if self.curriculum else self.current_map_path
         )
         if target_map != self.current_map_path:
             self.current_map_path = target_map

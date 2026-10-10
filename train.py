@@ -25,6 +25,7 @@ def parse_args():
     parser.add_argument("--clip-coef", type=float, default=0.2, help="PPO clipping coefficient")
     parser.add_argument("--save-interval", type=int, default=10000, help="Timesteps between saving checkpoints")
     parser.add_argument("--save-dir", type=str, default="checkpoints", help="Directory to save checkpoints")
+    parser.add_argument("--resume", type=str, default="", help="Path to checkpoint (.pt) to resume training from")
     parser.add_argument("--device", type=str, default="auto", help="Device: cuda, cpu, or auto")
     return parser.parse_args()
 
@@ -50,16 +51,29 @@ def main():
     print(f"Learning Rate:    {args.lr}")
     print(f"Entropy Coef:     {args.ent_coef}")
     print(f"Checkpoints:      {args.save_dir}/")
+    if args.resume:
+        print(f"Resuming From:    {args.resume}")
     print("=" * 65)
 
     os.makedirs(args.save_dir, exist_ok=True)
 
     # 1. Initialize Sub-Curriculum and Environment
-    curriculum = MapCurriculum()
+    curriculum = MapCurriculum(sample_mode="random")
     env = SingleAgentMazeEnv(curriculum=curriculum)
 
     # 2. Initialize Model
     model = RecurrentActorCritic().to(device)
+
+    if args.resume and os.path.exists(args.resume):
+        print(f"\n[Resume] Loading weights from {args.resume}...")
+        checkpoint = torch.load(args.resume, map_location=device, weights_only=True)
+        if "model_state_dict" in checkpoint:
+            model.load_state_dict(checkpoint["model_state_dict"])
+            if "tier_idx" in checkpoint:
+                curriculum.current_tier_idx = checkpoint["tier_idx"]
+        else:
+            model.load_state_dict(checkpoint)
+        print("[Resume] Weights restored successfully.\n")
 
     # 3. Initialize Trainer
     trainer = PPOTrainer(
