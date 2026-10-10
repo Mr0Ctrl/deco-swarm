@@ -135,17 +135,34 @@ python3 train.py \
 
 ---
 
-## 5. How to Tune Rewards & Goal Mechanics
+## 5. How to Tune Rewards & Environment Hyperparameters
 
-To change how the agent is evaluated, open [`src/envs/single_agent_env.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/src/envs/single_agent_env.py):
+You can customize all reward weights, timeout limits, and grid sizes in **two easy ways**:
 
-- **Progress Weight (Line ~202):** `dist_progress = (self.prev_dist_to_goal - curr_dist) * 0.05`
-  - Increase `0.05` $\to$ `0.10` to make the agent prioritize distance closing more aggressively.
-- **Urgency / Time Penalty (Line ~206):** `time_penalty = -0.01`
-  - Make more negative (e.g., `-0.02`) to penalize long circuitous paths.
-- **Collision Penalty (Line ~209):** `collision_penalty = -0.05 if collided_during_action else 0.0`
-  - Increase (e.g., `-0.15`) if the agent is scraping walls too much.
-- **Exploration Novelty Bonus (Line ~217):** `exploration_reward = 0.02`
-  - Awarded when the agent enters a new $40\times 40$ px grid cell during the episode.
-- **Terminal Goal Reward (Line ~223):** `terminal_reward = 10.0 if goal_reached else 0.0`
-- **Episode Timeout (Line ~42):** `max_steps = 500` ($50$ seconds in simulation).
+### Method A: Edit `configs/environment.yaml` (Recommended - No Code Changes Needed)
+Simply open [`configs/environment.yaml`](file:///home/mrctrl/Workspace/projects/deco-swarm/configs/environment.yaml):
+
+```yaml
+episode:
+  max_steps: 100             # Maximum decision steps before timeout (10 Hz)
+  action_repeat: 6           # Physics substeps per agent decision (60 Hz / 6 = 10 Hz)
+
+rewards:
+  progress_weight: 0.01      # Reward per unit of distance closed towards goal
+  time_penalty: -1.1         # Step urgency penalty
+  collision_penalty: -0.5    # Penalty when bumping into walls
+  exploration_weight: 0.1    # Bonus for discovering a new spatial cell
+  cell_size: 120.0           # Grid cell size in pixels for spatial visit tracking
+  goal_reward: 100.0         # Terminal reward for reaching the goal zone
+  timeout_penalty: -1.0      # Penalty applied if episode times out
+```
+
+### Method B: In Python Code (`env.rewards` / `RewardConfig`)
+In [`src/envs/single_agent_env.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/src/envs/single_agent_env.py), all parameters are grouped in typed dataclasses at the top of the file:
+```python
+# Access directly on the environment instance:
+env.rewards.goal_reward = 150.0
+env.rewards.time_penalty = -0.5
+env.max_steps = 200
+```
+Every step also returns a detailed dictionary breakdown in `info["agent_0"]["reward_breakdown"]` (`progress`, `time`, `collision`, `exploration`, `terminal`).

@@ -74,7 +74,7 @@ class MapCurriculum:
         tiers: Optional[List[TierConfig]] = None,
         sample_mode: str = "random",
         window_size: int = 30,
-        promotion_threshold: float = 0.95,
+        promotion_threshold: float = 0.975,
         demotion_threshold: float = 0.20,
         min_episodes_before_promotion: int = 30,
     ):
