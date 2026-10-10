@@ -169,50 +169,51 @@ Every step also returns a detailed dictionary breakdown in `info["agent_0"]["rew
 
 ---
 
-## 6. Catastrophic Failure Protection & Model Saving Rules
+## 6. Promotion-Based Checkpoints & Tier-Scoped Protection
 
-Deep reinforcement learning policies can occasionally experience sudden degradation or policy collapse due to gradient spikes or local minima. To ensure you never lose high-performing weights, [`train.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/train.py) implements three automatic protection rules:
+To prevent policy regression and ensure peak performance is captured without noisy disk churn, [`train.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/train.py) implements promotion-based graduation snapshots and tier-isolated safeguards:
 
 ```text
-                                  TRAINING LOOP
+                                  CURRICULUM FLOW
                                         │
            ┌────────────────────────────┼────────────────────────────┐
            ▼                            ▼                            ▼
-   RULE A: PEAK GUARD           RULE B: AUTO-ROLLBACK        RULE C: SAFE FINAL
-  checkpoints/model_best.pt     Detects Sudden Collapse     checkpoints/model_final.pt
-  Saved ONLY when a new         Restores peak weights &     Guaranteed to NEVER save a
-  record success rate or        halves learning rate to     degraded policy over good
-  fastest path is achieved!     escape loss cliff.          weights.
+   1. TIER GRADUATION           2. TIER MILESTONES          3. ISOLATED ROLLBACK
+   `model_graduated_tier_X.pt`  `model_best_tier_X.pt`      Only monitors intra-tier
+   Saved immediately when a     Saved only on genuine       drops after proficiency;
+   tier is mastered and the     high milestones (>=70% &    never triggers on fresh
+   agent is promoted!           +10% improvements).         tier exploration!
 ```
 
-### Rule A: Peak Performance Guard (`model_best.pt` & `model_best_tier_{id}.pt`)
-- The trainer continuously tracks historical peak success rates and fastest completion steps.
-- Whenever the agent sets a new high-water mark, it saves:
-  - `checkpoints/model_best.pt` (Global peak model)
-  - `checkpoints/model_best_tier_0.pt` (Best model for Tier 0)
-  - `checkpoints/model_best_tier_1.pt` (Best model for Tier 1)
-- **Result:** Your peak weights are never overwritten by subsequent plateauing.
+### 1. Graduation Checkpoints on Promotion (`model_graduated_tier_{id}.pt`)
+- When the agent masters a tier (e.g. achieves $\ge 85\%$ on Tier 0) and is promoted to Tier 1, the trainer immediately preserves:
+  - `checkpoints/model_graduated_tier_0.pt`
+  - `checkpoints/model_best_tier_0.pt`
+  - `checkpoints/model_best.pt`
+- **Result:** You have an immutable, permanent record of the exact model that conquered Tier 0, even as it moves on to learn complex obstacles.
 
-### Rule B: Automatic Collapse Detection & Rollback
-- If an agent has demonstrated proficiency ($\ge 50\%$ success rate) but suddenly drops to $\le 15\%$ over a rolling window:
-  1. Detects collapse: `[ALERT: CATASTROPHIC COLLAPSE DETECTED]`.
-  2. Automatically **rolls back** neural network weights to `model_best.pt`.
-  3. **Decays the learning rate by 50%** ($\text{lr} \gets \text{lr} \times 0.5$) to prevent destabilizing updates.
-  4. Resets the corrupted sliding window so the agent recovers cleanly from its peak state.
+### 2. Tier-Scoped Milestone Tracking (`model_best_tier_{id}.pt`)
+- Each tier maintains its **own independent peak record**.
+- To prevent saving on trivial micro-fluctuations, a new tier milestone is only saved when:
+  - The agent has completed at least the evaluation window on that tier.
+  - Success rate reaches **$\ge 70\%$**.
+  - Success rate improves by at least **$+10\%$** over the previous tier peak.
 
-### Rule C: Safe Final Model Guard (`model_final.pt`)
-- When a training run completes, it evaluates whether the last step degraded compared to the peak:
-  - If the last step degraded by $> 25\%$, the system **protects `model_final.pt` by saving peak weights instead**:
-    ```text
-    [SAFE FINAL RULE] Final step policy is degraded compared to peak!
-    >>> Protecting model_final.pt: Saving peak weights as model_final.pt.
-    ```
-  - `model_latest.pt` always captures the raw final step regardless.
+### 3. Safe Intra-Tier Collapse Protection
+- When entering a brand-new, harder tier (like Tier 1), a success rate of $0\%$ is normal during early exploration. The system **never** compares performance across different tiers.
+- A rollback only triggers if:
+  1. The agent is on the **same tier**.
+  2. It had already proven $\ge 70\%$ proficiency on that specific tier.
+  3. It has spent $\ge 40$ episodes on that tier, but performance suddenly plunged to $\le 20\%$.
+  - In that rare failure event, it restores `model_best_tier_{curr_tier}.pt` and anneals the learning rate.
 
-### Summary of Saved Model Files:
+### Summary of Checkpoint Files:
 | File | Behavior | Purpose |
 | :--- | :--- | :--- |
-| `checkpoints/model_best.pt` | **Only updates when performance improves** | Guaranteed peak policy across the entire training history. |
-| `checkpoints/model_final.pt` | **Protected final checkpoint** | Best policy ready for deployment/watching without risk of degradation. |
-| `checkpoints/model_latest.pt` | **Latest raw frame** | Exact current state, useful if you want to inspect unconstrained progress. |
+| `checkpoints/model_graduated_tier_0.pt` | **Saved upon Tier 0 mastery** | Permanent snapshot of the model that conquered Tier 0 navigation. |
+| `checkpoints/model_graduated_tier_1.pt` | **Saved upon Tier 1 mastery** | Permanent snapshot of the model that conquered Tier 1 obstacle avoidance. |
+| `checkpoints/model_best_tier_{id}.pt` | **Highest milestone on that tier** | Best policy for that specific curriculum level. |
+| `checkpoints/model_best.pt` | **Global peak model** | Highest overall policy across training history. |
+| `checkpoints/model_final.pt` | **Run completion snapshot** | Model at the end of the training execution. |
+| `checkpoints/model_latest.pt` | **Rolling latest checkpoint** | Captured periodically (every `--save-interval`). |
 

@@ -107,11 +107,10 @@ def main():
     last_save_step = 0
     iteration = 0
 
-    # Catastrophic failure protection trackers
-    best_success_rate = 0.0
-    best_avg_steps = 9999.0
-    best_model_state = None
-    min_episodes_for_peak = 15
+    # Catastrophic failure protection & tier tracking
+    tier_peaks: Dict[int, float] = {}
+    tier_best_states: Dict[int, Any] = {}
+    current_tier_at_start = curriculum.current_tier.tier_id
 
     print(f"\n[Curriculum Starting] Active Tier: {curriculum.current_tier.name} | Map: {curriculum.current_map_name}\n")
 
@@ -130,11 +129,12 @@ def main():
 
         succ_rate = curriculum.success_rate
         avg_steps = curriculum.avg_steps
+        curr_tier_id = curriculum.current_tier.tier_id
 
         # Log progress
         print(
             f"[Step {trainer.global_step:6d}/{args.total_timesteps}] "
-            f"Tier: {curriculum.current_tier.tier_id} ({curriculum.current_map_name}) | "
+            f"Tier: {curr_tier_id} ({curriculum.current_map_name}) | "
             f"Success: {succ_rate:5.1%} | "
             f"AvgSteps: {avg_steps:5.1f} | "
             f"PiLoss: {train_metrics['policy_loss']:+6.3f} | "
@@ -143,50 +143,77 @@ def main():
             f"FPS: {fps}"
         )
 
-        # 1. Best Model Tracking (Protection Rule A: Save peak performance)
-        is_new_best = False
-        if len(curriculum.recent_successes) >= min_episodes_for_peak:
-            if succ_rate > best_success_rate or (succ_rate == best_success_rate and avg_steps < best_avg_steps and succ_rate > 0.0):
-                best_success_rate = succ_rate
-                best_avg_steps = avg_steps
-                is_new_best = True
-                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+        # 1. Promotion Checkpoint: Save exact weights when a tier is MASTERED!
+        if curriculum.last_promoted_tier is not None:
+            promoted_tier = curriculum.last_promoted_tier
+            curriculum.last_promoted_tier = None
 
-                best_path = os.path.join(args.save_dir, "model_best.pt")
-                tier_best_path = os.path.join(args.save_dir, f"model_best_tier_{curriculum.current_tier.tier_id}.pt")
+            grad_path = os.path.join(args.save_dir, f"model_graduated_tier_{promoted_tier}.pt")
+            tier_best_path = os.path.join(args.save_dir, f"model_best_tier_{promoted_tier}.pt")
+            best_global_path = os.path.join(args.save_dir, "model_best.pt")
 
-                checkpoint_best = {
-                    "step": trainer.global_step,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": trainer.optimizer.state_dict(),
-                    "tier_idx": curriculum.current_tier_idx,
-                    "map_idx": curriculum.current_map_idx,
-                    "success_rate": best_success_rate,
-                    "avg_steps": best_avg_steps,
-                }
-                torch.save(checkpoint_best, best_path)
-                torch.save(checkpoint_best, tier_best_path)
-                print(f"  [BEST MODEL] New peak ({best_success_rate:.1%})! Saved to {best_path}")
+            grad_checkpoint = {
+                "step": trainer.global_step,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": trainer.optimizer.state_dict(),
+                "tier_idx": promoted_tier,
+                "success_rate": curriculum.promotion_threshold,
+                "avg_steps": avg_steps,
+            }
+            torch.save(grad_checkpoint, grad_path)
+            torch.save(grad_checkpoint, tier_best_path)
+            torch.save(grad_checkpoint, best_global_path)
+            print(f"\n  [PROMOTION CHECKPOINT] Tier {promoted_tier} Mastered! Saved {grad_path} & {tier_best_path}\n")
 
-        # 2. Catastrophic Collapse Detection & Rollback (Protection Rule B)
-        if best_success_rate >= 0.50 and succ_rate <= 0.15 and best_model_state is not None:
+        # 2. Tier-Scoped Milestone Best Tracking (Saves only on significant 10% jumps)
+        prev_tier_peak = tier_peaks.get(curr_tier_id, 0.0)
+        if (
+            len(curriculum.recent_successes) >= curriculum.window_size
+            and succ_rate >= 0.70
+            and succ_rate >= prev_tier_peak + 0.10
+        ):
+            tier_peaks[curr_tier_id] = succ_rate
+            tier_best_states[curr_tier_id] = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+
+            tier_best_path = os.path.join(args.save_dir, f"model_best_tier_{curr_tier_id}.pt")
+            best_global_path = os.path.join(args.save_dir, "model_best.pt")
+
+            ckpt_milestone = {
+                "step": trainer.global_step,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": trainer.optimizer.state_dict(),
+                "tier_idx": curr_tier_id,
+                "map_idx": curriculum.current_map_idx,
+                "success_rate": succ_rate,
+                "avg_steps": avg_steps,
+            }
+            torch.save(ckpt_milestone, tier_best_path)
+            torch.save(ckpt_milestone, best_global_path)
+            print(f"  [TIER {curr_tier_id} MILESTONE] New high ({succ_rate:.1%})! Saved {tier_best_path}")
+
+        # 3. Intra-Tier Collapse Protection (Only within the SAME tier after established proficiency)
+        if (
+            curr_tier_id in tier_peaks
+            and tier_peaks[curr_tier_id] >= 0.70
+            and succ_rate <= 0.20
+            and curriculum.episodes_in_current_level >= 40
+            and curr_tier_id in tier_best_states
+        ):
             print(
-                f"\n  [ALERT: CATASTROPHIC COLLAPSE DETECTED] Success dropped from {best_success_rate:.1%} to {succ_rate:.1%}!"
+                f"\n  [ALERT: CATASTROPHIC COLLAPSE IN TIER {curr_tier_id}] Success dropped from {tier_peaks[curr_tier_id]:.1%} to {succ_rate:.1%}!"
             )
-            print("  >>> Rolling back model to peak weights (model_best.pt) and annealing learning rate by 50%...")
-            model.load_state_dict({k: v.to(device) for k, v in best_model_state.items()})
+            print(f"  >>> Rolling back to model_best_tier_{curr_tier_id}.pt and annealing learning rate by 50%...")
+            model.load_state_dict({k: v.to(device) for k, v in tier_best_states[curr_tier_id].items()})
 
-            # Decay learning rate to prevent jumping off loss cliffs again
             for param_group in trainer.optimizer.param_groups:
                 param_group["lr"] *= 0.5
                 current_lr = param_group["lr"]
             print(f"  >>> Resumed with annealed LR: {current_lr:.6f}\n")
 
-            # Reset degraded statistics to allow healthy recovery
             curriculum.recent_successes.clear()
             curriculum.recent_steps.clear()
 
-        # 3. Periodic Checkpoint Saving
+        # 4. Periodic Checkpoint Saving
         if trainer.global_step - last_save_step >= args.save_interval:
             save_path = os.path.join(args.save_dir, f"model_step_{trainer.global_step}.pt")
             latest_path = os.path.join(args.save_dir, "model_latest.pt")
@@ -194,7 +221,7 @@ def main():
                 "step": trainer.global_step,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": trainer.optimizer.state_dict(),
-                "tier_idx": curriculum.current_tier_idx,
+                "tier_idx": curr_tier_id,
                 "map_idx": curriculum.current_map_idx,
                 "success_rate": succ_rate,
                 "avg_steps": avg_steps,
@@ -202,43 +229,26 @@ def main():
             torch.save(checkpoint, save_path)
             torch.save(checkpoint, latest_path)
             last_save_step = trainer.global_step
-            print(f"  >>> Checkpoint saved to {save_path} & {latest_path}")
+            print(f"  >>> Periodic checkpoint saved to {save_path} & {latest_path}")
 
-    # Final save (Protection Rule C: Guarantee model_final.pt is safe and healthy)
+    # Final save
     final_path = os.path.join(args.save_dir, "model_final.pt")
     latest_path = os.path.join(args.save_dir, "model_latest.pt")
 
-    # Save the absolute latest state
     checkpoint_latest = {
         "step": trainer.global_step,
         "model_state_dict": model.state_dict(),
-        "tier_idx": curriculum.current_tier_idx,
+        "tier_idx": curriculum.current_tier.tier_id,
         "map_idx": curriculum.current_map_idx,
         "success_rate": curriculum.success_rate,
         "avg_steps": curriculum.avg_steps,
     }
     torch.save(checkpoint_latest, latest_path)
-
-    # If the latest step severely degraded from peak, preserve best model as model_final.pt
-    if best_model_state is not None and (curriculum.success_rate < best_success_rate - 0.25):
-        print("\n  [SAFE FINAL RULE] Final step policy is degraded compared to peak!")
-        print(f"  >>> Protecting model_final.pt: Saving peak weights ({best_success_rate:.1%}) as model_final.pt.")
-        checkpoint_final = {
-            "step": trainer.global_step,
-            "model_state_dict": {k: v.to(device) for k, v in best_model_state.items()},
-            "tier_idx": curriculum.current_tier_idx,
-            "map_idx": curriculum.current_map_idx,
-            "success_rate": best_success_rate,
-            "avg_steps": best_avg_steps,
-        }
-        torch.save(checkpoint_final, final_path)
-    else:
-        torch.save(checkpoint_latest, final_path)
+    torch.save(checkpoint_latest, final_path)
 
     total_time = time.time() - start_time
     print("\n" + "=" * 65)
     print(f"Training completed in {total_time:.1f}s")
-    print(f"  - Peak Model:     {os.path.join(args.save_dir, 'model_best.pt')}")
     print(f"  - Final Model:    {final_path}")
     print(f"  - Latest Model:   {latest_path}")
     print("=" * 65)
