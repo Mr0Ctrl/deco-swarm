@@ -1,0 +1,31 @@
+# configs/maps/arena_1v0.yaml
+name: "faz1v1.6 zigzagzig out"
+
+dimensions:
+  width: 1000
+  height: 1000
+
+# Ajanların doğuş noktaları: [x, y, başlangıç_açısı_derece]
+spawns:
+  agent_0: [200.0, 200.0, 45.0]
+
+# Hedef Bölgesi: [x, y, yarıçap]
+goal:
+  position: [800.0, 800.0]
+  radius: 32.0
+
+# İç Duvarlar ve Engeller
+walls:
+  # Serbest çizgi parçaları: [[x1, y1], [x2, y2]]
+  segments:
+    - [[850, 450], [550, 450]]
+    - [[450, 850], [450, 550]]
+
+    - [[550, 550], [550, 450]]
+    - [[550, 550], [450, 550]]
+
+    - [[850, 450], [850, 150]]
+    - [[450, 850], [150, 850]]
+
+  # # Kutu siperler: [x, y, genişlik, yükseklik]
+  # boxes:

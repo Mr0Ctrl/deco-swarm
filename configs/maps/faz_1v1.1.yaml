@@ -17,9 +17,9 @@ goal:
 # İç Duvarlar ve Engeller
 walls:
   # # Serbest çizgi parçaları: [[x1, y1], [x2, y2]]
-  # segments:
-
+  segments:
+    - [[450, 550], [550, 450]]
   # Kutu siperler: [x, y, genişlik, yükseklik]
   boxes:
-    - [300, 500, 200, 200]
-    - [500, 300, 200, 200]
+    - [250, 550, 200, 200]
+    - [550, 250, 200, 200]

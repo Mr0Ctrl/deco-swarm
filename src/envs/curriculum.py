@@ -40,6 +40,8 @@ class MapCurriculum:
                 "configs/maps/faz_1v0.3.yaml",
                 "configs/maps/faz_1v0.4.yaml",
                 "configs/maps/faz_1v0.5.yaml",
+                "configs/maps/faz_1v0.6.yaml",
+                "configs/maps/faz_1v0.7.yaml",
             ],
         ),
         TierConfig(
@@ -52,6 +54,8 @@ class MapCurriculum:
                 "configs/maps/faz_1v1.3.yaml",
                 "configs/maps/faz_1v1.4.yaml",
                 "configs/maps/faz_1v1.5.yaml",
+                "configs/maps/faz_1v1.6.yaml",
+                
             ],
         ),
         TierConfig(
