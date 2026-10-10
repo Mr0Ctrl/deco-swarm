@@ -1,54 +1,70 @@
-```
+# DECO-SWARM: Repository Structure & Component Organization
 
-deco-swarm/                         # Repo Kökü (Git)
-├── documents/                      # Dokümantasyon
-│   ├── akış.md
-│   ├── geliştime.md
-│   ├── ptoje_tanımı.md
-│   └── risklr.md
+```text
+deco-swarm/
+├── documents/                      # System documentation & specifications (English)
+│   ├── project_overview.md         # Scope, technical stack, kinematics, observation & action spaces
+│   ├── architecture.md             # Clean architecture layers, decoupling, and interfaces
+│   ├── roadmap.md                  # 28-week development timeline & milestone status
+│   ├── development.md              # Frameworks, neural network architecture, performance targets
+│   ├── risks.md                    # Retraining risks, training pathologies, and mitigation
+│   └── structure.md                # Repository layout and module responsibilities
 │
-├── configs/                        # Fizik ve Eğitim Konfigürasyonları
-│   ├── physics.yaml                # Ray sayısı, FOV, hızlar, harita boyutları
-│   └── train_1v0.yaml
+├── configs/                        # YAML configuration files
+│   ├── agent.yaml                  # Body dimensions, speeds, and perception parameters (90 rays, 180° FOV)
+│   ├── render.yaml                 # Screen resolution, FPS, camera defaults
+│   ├── simulation.yaml             # Physics tick rate (60 Hz) and collision iterations
+│   └── maps/                       # Curriculum map definitions
+│       ├── faz_1v0.1.yaml ...      # Incremental difficulty navigation mazes
+│       └── haritalar.md            # Map design notes and layout descriptions
 │
-├── src/                            # Ana Paket
+├── src/                            # Core Python package
 │   ├── __init__.py
 │   │
-│   ├── engine/                 # SAF FİZİK MOTORU (Pygame YOK, Headless)
+│   ├── engine/                     # Headless physics & simulation core (NO Pygame dependency)
 │   │   ├── __init__.py
-│   │   ├── world.py            # Tüm ajanları, mermileri, duvarları tutan ana simülasyon
-│   │   ├── agent.py            # Ajan kinematiği (konum, yönelim, can)
-│   │   ├── map.py              # Duvar segmentleri ve engeller
-│   │   └── raycast.py          # Çizgi-ışın kesişim matematiği
+│   │   ├── core/                   # Level 0: Pure math & geometry
+│   │   │   ├── geometry.py         # Point2D, distance, angle wrapping, ego polar computation
+│   │   │   └── collision.py        # Circle-segment collision resolution
+│   │   ├── entities/               # Level 1: Domain entities
+│   │   │   ├── agent.py            # Agent kinematics, state, and 640-float observation tensor
+│   │   │   └── map.py              # GameMap and line segment collections
+│   │   ├── services/               # Level 2: Algorithmic services
+│   │   │   └── raycast.py          # Line-ray intersection and batch raycasting
+│   │   ├── controllers.py          # Input abstraction (Keyboard, Random, ActionDecoder)
+│   │   ├── map_loader.py           # YAML map loader and dataclass parser
+│   │   └── world.py                # Level 3: Simulation orchestrator (step loop, physics tick)
 │   │
-│   ├── rendering/              # GÖRSELLEŞTİRME KATMANI (Pygame burada)
+│   ├── rendering/                  # Level 4: Visualization layer (Pygame)
 │   │   ├── __init__.py
-│   │   └── pygame_renderer.py  # World nesnesini alıp ekrana 60 FPS çizen pencere
+│   │   ├── camera.py               # Viewport transform, pan, zoom, agent-follow
+│   │   ├── drawers/                # Dedicated drawer modules
+│   │   │   ├── agent_drawer.py     # Agent circle, heading indicator, health
+│   │   │   ├── goal_drawer.py      # Objective markers
+│   │   │   ├── map_drawer.py       # Wall segments and obstacle rendering
+│   │   │   └── ray_drawer.py       # Raycast beam visualization
+│   │   └── pygame_renderer.py      # Window initialization, event loop, HUD overlay
 │   │
-│   ├── envs/                   # GYMNASIUM / RL ARAYÜZÜ
-│   │   ├── __init__.py
-│   │   └── single_agent_env.py # Headless ve Human render_mode desteği burada birleşir
+│   ├── envs/                       # Level 4: RL environment wrappers (Gymnasium / PettingZoo)
+│   │   ├── __init__.py             # [Planned]
+│   │   ├── single_agent_env.py     # [Planned] Gymnasium wrapper for Phase 1 (1v0) with Action Repeat
+│   │   └── swarm_env.py            # [Planned] PettingZoo ParallelEnv wrapper for Phases 3-4
 │   │
-│   ├── models/                 # PyTorch Modelleri (GRU, Actor-Critic)
-│   │   └── actor_critic.py
+│   ├── models/                     # PyTorch neural network architectures
+│   │   ├── __init__.py             # [Planned]
+│   │   └── actor_critic.py         # [Planned] Multi-modal feature extractor + GRU + Actor-Critic heads
 │   │
-│   └── training/               # PPO Eğitim Betikleri
-│       └── ppo.py
+│   └── training/                   # RL training pipelines
+│       ├── __init__.py             # [Planned]
+│       └── ppo.py                  # [Planned] PPO implementation (cleanrl-style) with GAE & GRU rollouts
 │
-├── cpp/                            # C++ Hızlandırma Katmanı (Faz 2)
-│   ├── CMakeLists.txt
-│   └── ...
+├── cpp/                            # [Phase 2] C++ high-performance acceleration core
+│   ├── CMakeLists.txt              # Build configuration
+│   └── ...                         # Fast raycast & collision routines via pybind11
 │
-├── play.py                         # MERKEZİ GÖRSEL ÇALIŞTIRICI (Head Modu)
-│                                   # --mode test     : Haritayı ve ray'leri klavyeyle test et
-│                                   # --mode watch    : Eğitilmiş modeli canlı izle
-│                                   # --mode human-vs-ai : İnsan botlara karşı
-│
-├── train.py                        # MERKEZİ EĞİTİM BETİĞİ (Headless Modu)
-│                                   # Arka planda penceresiz son sürat eğitir
+├── play.py                         # Interactive visualization entry point (Pygame GUI testbed)
+├── train.py                        # [Planned] High-throughput headless training entry point
 │
 ├── .gitignore
-├── pyproject.toml
 └── README.md
-
 ```
