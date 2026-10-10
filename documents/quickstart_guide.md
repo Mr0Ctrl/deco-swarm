@@ -166,3 +166,53 @@ env.rewards.time_penalty = -0.5
 env.max_steps = 200
 ```
 Every step also returns a detailed dictionary breakdown in `info["agent_0"]["reward_breakdown"]` (`progress`, `time`, `collision`, `exploration`, `terminal`).
+
+---
+
+## 6. Catastrophic Failure Protection & Model Saving Rules
+
+Deep reinforcement learning policies can occasionally experience sudden degradation or policy collapse due to gradient spikes or local minima. To ensure you never lose high-performing weights, [`train.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/train.py) implements three automatic protection rules:
+
+```text
+                                  TRAINING LOOP
+                                        │
+           ┌────────────────────────────┼────────────────────────────┐
+           ▼                            ▼                            ▼
+   RULE A: PEAK GUARD           RULE B: AUTO-ROLLBACK        RULE C: SAFE FINAL
+  checkpoints/model_best.pt     Detects Sudden Collapse     checkpoints/model_final.pt
+  Saved ONLY when a new         Restores peak weights &     Guaranteed to NEVER save a
+  record success rate or        halves learning rate to     degraded policy over good
+  fastest path is achieved!     escape loss cliff.          weights.
+```
+
+### Rule A: Peak Performance Guard (`model_best.pt` & `model_best_tier_{id}.pt`)
+- The trainer continuously tracks historical peak success rates and fastest completion steps.
+- Whenever the agent sets a new high-water mark, it saves:
+  - `checkpoints/model_best.pt` (Global peak model)
+  - `checkpoints/model_best_tier_0.pt` (Best model for Tier 0)
+  - `checkpoints/model_best_tier_1.pt` (Best model for Tier 1)
+- **Result:** Your peak weights are never overwritten by subsequent plateauing.
+
+### Rule B: Automatic Collapse Detection & Rollback
+- If an agent has demonstrated proficiency ($\ge 50\%$ success rate) but suddenly drops to $\le 15\%$ over a rolling window:
+  1. Detects collapse: `[ALERT: CATASTROPHIC COLLAPSE DETECTED]`.
+  2. Automatically **rolls back** neural network weights to `model_best.pt`.
+  3. **Decays the learning rate by 50%** ($\text{lr} \gets \text{lr} \times 0.5$) to prevent destabilizing updates.
+  4. Resets the corrupted sliding window so the agent recovers cleanly from its peak state.
+
+### Rule C: Safe Final Model Guard (`model_final.pt`)
+- When a training run completes, it evaluates whether the last step degraded compared to the peak:
+  - If the last step degraded by $> 25\%$, the system **protects `model_final.pt` by saving peak weights instead**:
+    ```text
+    [SAFE FINAL RULE] Final step policy is degraded compared to peak!
+    >>> Protecting model_final.pt: Saving peak weights as model_final.pt.
+    ```
+  - `model_latest.pt` always captures the raw final step regardless.
+
+### Summary of Saved Model Files:
+| File | Behavior | Purpose |
+| :--- | :--- | :--- |
+| `checkpoints/model_best.pt` | **Only updates when performance improves** | Guaranteed peak policy across the entire training history. |
+| `checkpoints/model_final.pt` | **Protected final checkpoint** | Best policy ready for deployment/watching without risk of degradation. |
+| `checkpoints/model_latest.pt` | **Latest raw frame** | Exact current state, useful if you want to inspect unconstrained progress. |
+

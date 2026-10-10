@@ -23,6 +23,8 @@ Changes to core simulation parameters invalidate pre-trained weights and force a
   - *Mitigation:* Persistent relative polar target vector ($r, \Delta\theta$) combined with GRU recurrent memory cells.
 - **Sparse Reward Bottlenecks:** In complex mazes, random exploratory actions have near-zero probability of reaching the objective, causing training stagnation for millions of steps.
   - *Mitigation:* Curriculum learning with incremental maze complexity (`faz_1v0.1` to `faz_1v2.6`).
+- **Policy Collapse & Catastrophic Degeneration:** An agent may reach high proficiency and suddenly destabilize due to gradient spikes, overwriting checkpoint weights with a degraded policy.
+  - *Mitigation:* The three-rule protection system in `train.py`: continuous peak performance tracking (`model_best.pt`), automatic rollback with learning rate annealing when severe degradation is detected, and protected final model preservation (`model_final.pt`).
 
 ---
 
