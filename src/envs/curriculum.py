@@ -89,6 +89,7 @@ class MapCurriculum:
         self.current_map_idx = 0
         self.locked = False  # If True, curriculum does not promote or demote
         self.last_promoted_tier: Optional[int] = None  # Records tier id when promotion occurs
+        self.last_promotion_info: Optional[Dict[str, Any]] = None
 
         self.recent_successes: deque = deque(maxlen=window_size)
         self.recent_steps: deque = deque(maxlen=window_size)
@@ -183,13 +184,17 @@ class MapCurriculum:
         if self.sample_mode == "random":
             # In random mode, the entire tier is mastered! Advance to next tier.
             if self.current_tier_idx + 1 < len(self.tiers):
-                self.last_promoted_tier = self.current_tier.tier_id
+                old_tier = self.current_tier
+                self.last_promoted_tier = old_tier.tier_id
                 self.current_tier_idx += 1
                 new_tier = self.current_tier
-                print(
-                    f"\n[Curriculum Promotion] *** MASTERED {self.tiers[self.current_tier_idx - 1].name} "
-                    f"({self.success_rate:.1%}) -> PROMOTED TO {new_tier.name}! ***\n"
-                )
+                self.last_promotion_info = {
+                    "old_tier": old_tier.tier_id,
+                    "old_name": old_tier.name,
+                    "new_tier": new_tier.tier_id,
+                    "new_name": new_tier.name,
+                    "rate": self.success_rate,
+                }
             else:
                 return False
         else:

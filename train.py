@@ -121,6 +121,33 @@ def main():
         # Collect experience
         current_obs, current_hidden = trainer.collect_rollouts(current_obs, current_hidden)
 
+        # 1. Promotion Checkpoint: Handle and save immediately after rollouts (before train_epoch & step log)
+        if curriculum.last_promotion_info is not None:
+            info = curriculum.last_promotion_info
+            curriculum.last_promotion_info = None
+            old_tier = info["old_tier"]
+
+            grad_path = os.path.join(args.save_dir, f"model_graduated_tier_{old_tier}.pt")
+            tier_best_path = os.path.join(args.save_dir, f"model_best_tier_{old_tier}.pt")
+            best_global_path = os.path.join(args.save_dir, "model_best.pt")
+
+            grad_checkpoint = {
+                "step": trainer.global_step,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": trainer.optimizer.state_dict(),
+                "tier_idx": old_tier,
+                "success_rate": info["rate"],
+            }
+            torch.save(grad_checkpoint, grad_path)
+            torch.save(grad_checkpoint, tier_best_path)
+            torch.save(grad_checkpoint, best_global_path)
+
+            print(
+                f"\n[Curriculum Promotion] *** MASTERED {info['old_name']} ({info['rate']:.1%}) "
+                f"-> PROMOTED TO {info['new_name']}! ***"
+            )
+            print(f"  >>> [GRADUATION CHECKPOINT] Saved mastered Tier {old_tier} weights to {grad_path}\n")
+
         # Update policy
         train_metrics = trainer.train_epoch()
 
@@ -142,28 +169,6 @@ def main():
             f"Ent: {train_metrics['entropy']:4.2f} | "
             f"FPS: {fps}"
         )
-
-        # 1. Promotion Checkpoint: Save exact weights when a tier is MASTERED!
-        if curriculum.last_promoted_tier is not None:
-            promoted_tier = curriculum.last_promoted_tier
-            curriculum.last_promoted_tier = None
-
-            grad_path = os.path.join(args.save_dir, f"model_graduated_tier_{promoted_tier}.pt")
-            tier_best_path = os.path.join(args.save_dir, f"model_best_tier_{promoted_tier}.pt")
-            best_global_path = os.path.join(args.save_dir, "model_best.pt")
-
-            grad_checkpoint = {
-                "step": trainer.global_step,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": trainer.optimizer.state_dict(),
-                "tier_idx": promoted_tier,
-                "success_rate": curriculum.promotion_threshold,
-                "avg_steps": avg_steps,
-            }
-            torch.save(grad_checkpoint, grad_path)
-            torch.save(grad_checkpoint, tier_best_path)
-            torch.save(grad_checkpoint, best_global_path)
-            print(f"\n  [PROMOTION CHECKPOINT] Tier {promoted_tier} Mastered! Saved {grad_path} & {tier_best_path}\n")
 
         # 2. Tier-Scoped Milestone Best Tracking (Saves only on significant 10% jumps)
         prev_tier_peak = tier_peaks.get(curr_tier_id, 0.0)
