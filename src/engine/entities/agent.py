@@ -51,6 +51,7 @@ class Agent:
         # --- İÇ KİNEMATİK VE ÖNCEKİ AKSİYON (a_{t-1}) ---
         self.current_vel = (0.0, 0.0, 0.0)  # (v_ileri, v_yan, omega_donus) [-1, 1]
         self.last_action = (0.0, 0.0, 0.0)  # Önceki hareket kararı
+        self.collided = False  # Son adımda engele çarpma durumu
 
     @property
     def position(self) -> Point2D:

@@ -47,12 +47,22 @@ class World:
 
         self._update_perceptions()
 
+    def load_map(self, map_config: MapConfig):
+        """Yeni bir harita yükler ve dünyayı baştan başlatır."""
+        self.map_config = map_config
+        self.map = GameMap(map_config.width, map_config.height, map_config.segments)
+        self.goal_pos = map_config.goal_pos
+        self.goal_radius = map_config.goal_radius
+        self.max_map_distance = math.hypot(map_config.width, map_config.height)
+        self.reset()
+
     def step(self, actions: Dict[str, Tuple[float, float, float]], dt: float):
         """
         actions: {'agent_0': (move_fwd, strafe, rotate_dir)}
         """
         # 1. Hareket ve İç Durum Güncellemesi
         for agent_id, agent in self.agents.items():
+            agent.collided = False
             if agent_id in actions:
                 move_fwd, strafe, rotate_dir = actions[agent_id]
 
@@ -68,7 +78,9 @@ class World:
         for _ in range(iterations):
             for agent in self.agents.values():
                 for seg in self.map.segments:
-                    new_pos, _ = resolve_circle_segment(agent.position, agent.radius, seg)
+                    new_pos, has_hit = resolve_circle_segment(agent.position, agent.radius, seg)
+                    if has_hit:
+                        agent.collided = True
                     agent.set_position(new_pos)
 
         # 3. Gözlem ve Algıları Güncelle
