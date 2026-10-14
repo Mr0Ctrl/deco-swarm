@@ -20,6 +20,8 @@ rewards:
   exploration_weight: 0.10
   cell_size: 80.0 # Grid cell size in pixels for spatial visit tracking
 
-  # 5. Terminal rewards / penalties
-  goal_reward: 100.0 # Reward when agent reaches the goal perimeter
+  # 5. Terminal rewards & Time-Efficiency Scaling
+  goal_reward: 100.0 # Peak reward awarded for solving the map
+  goal_time_decay: 0.5 # Fraction deducted for slow completion (e.g. 0.5 means slowest completion gets 50% less)
+  min_goal_ratio: 0.5 # Minimum guaranteed floor (0.5 = agent always gets at least 50 points if it reaches the goal)
   timeout_penalty: -5.0 # Penalty applied if agent runs out of time without reaching goal

@@ -39,6 +39,8 @@ class RewardConfig:
     exploration_weight: float = 0.1     # Novelty bonus for visiting a new 2D grid cell
     cell_size: float = 120.0            # Grid cell size in pixels for spatial visit tracking
     goal_reward: float = 100.0          # Terminal bonus awarded upon reaching the goal
+    goal_time_decay: float = 0.5        # Max percentage of goal reward deducted for slowest completion (0.0 = fixed reward, 1.0 = linear decay to min_ratio)
+    min_goal_ratio: float = 0.5         # Minimum guaranteed fraction of goal_reward even if completed on final step
     timeout_penalty: float = -1.0       # Terminal penalty if episode runs out of steps
 
     @classmethod
@@ -50,6 +52,8 @@ class RewardConfig:
             exploration_weight=float(data.get("exploration_weight", cls.exploration_weight)),
             cell_size=float(data.get("cell_size", cls.cell_size)),
             goal_reward=float(data.get("goal_reward", cls.goal_reward)),
+            goal_time_decay=float(data.get("goal_time_decay", cls.goal_time_decay)),
+            min_goal_ratio=float(data.get("min_goal_ratio", cls.min_goal_ratio)),
             timeout_penalty=float(data.get("timeout_penalty", cls.timeout_penalty)),
         )
 
@@ -359,13 +363,12 @@ class SingleAgentMazeEnv(ParallelEnv):
         else:
             expl_rew = 0.0
 
-        # 5. Terminal reward (scaled by time efficiency) or timeout penalty
+        # 5. Terminal reward (scaled by configurable time efficiency) or timeout penalty
         if goal_reached:
-            # Efficiency scaling: fast completions receive maximum bonus (up to 100%),
-            # while longer paths still receive a solid reward (at least 50% of goal_reward).
-            # This completely eliminates constant step-penalty bleed while rewarding fast solutions!
-            efficiency_ratio = 1.0 - (float(self.step_count) / float(self.max_steps)) * 0.5
-            term_rew = cfg.goal_reward * max(0.5, efficiency_ratio)
+            # Configurable efficiency scaling:
+            # reward = goal_reward * max(min_goal_ratio, 1.0 - (step_count / max_steps) * goal_time_decay)
+            efficiency_ratio = 1.0 - (float(self.step_count) / float(self.max_steps)) * cfg.goal_time_decay
+            term_rew = cfg.goal_reward * max(cfg.min_goal_ratio, efficiency_ratio)
         elif timed_out:
             term_rew = cfg.timeout_penalty
         else:
