@@ -14,7 +14,36 @@ class RaycastService:
         num_rays: int,
         max_dist: float,
         segments: List[Segment2D],
+        cpp_segments: list = None,
     ) -> List[RayHit]:
+        try:
+            import deco_core_cpp
+            import numpy as np
+
+            # Fast C++ path
+            origin_arr = np.array(origin, dtype=np.float32)
+            if cpp_segments is None:
+                cpp_segments = [
+                    deco_core_cpp.Segment2D(np.array(s[0], dtype=np.float32), np.array(s[1], dtype=np.float32))
+                    for s in segments
+                ]
+            raw_hits = deco_core_cpp.cast_rays(
+                origin_arr, float(heading_deg), float(fov_deg), int(num_rays), float(max_dist), cpp_segments
+            )
+            # Wrap into RayHit dataclass expected by observation builder & renderer
+            return [
+                RayHit(
+                    endpoint=(float(h.endpoint[0]), float(h.endpoint[1])),
+                    distance=h.norm_dist * max_dist,
+                    norm_distance=h.norm_dist,
+                    has_hit=h.has_hit,
+                )
+                for h in raw_hits
+            ]
+        except ImportError:
+            pass
+
+        # Fallback pure-Python path
         results: List[RayHit] = []
 
         if num_rays == 1:

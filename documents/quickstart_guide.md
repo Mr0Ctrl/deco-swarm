@@ -20,6 +20,31 @@ python3 -c "import torch; print('CUDA Available:', torch.cuda.is_available(), '|
 
 ---
 
+## 2. High-Performance C++ Core Setup (`deco_core_cpp`)
+
+The computationally intensive spatial mathematics—including multi-segment raycasting, continuous sliding collisions, and ego-polar tracking—are compiled as a native C++17 shared module via `pybind11` and `Eigen3`.
+
+### Compiling the C++ Core:
+```bash
+# From the repository root with venv activated:
+mkdir -p cpp_core/build
+cd cpp_core/build
+cmake -DPython3_ROOT_DIR=$(readlink -f ../../venv) -DPython3_FIND_STRATEGY=LOCATION ..
+make -j$(nproc)
+cd ../..
+
+# Link the compiled shared library so Python discovers it:
+ln -sf $(readlink -f cpp_core/build/deco_core_cpp.*.so) src/deco_core_cpp.so
+```
+
+### Verifying C++ Module:
+```bash
+PYTHONPATH=src python3 -c "import deco_core_cpp; print('deco_core_cpp loaded successfully!')"
+```
+*(If the C++ module is not compiled, the engine gracefully falls back to the pure-Python implementation).*
+
+---
+
 ## 2. Testing & Visualizing (Play Mode)
 
 [`play.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/play.py) is the interactive testbed. It supports two modes: **Human (Manual)** and **AI Watch**.

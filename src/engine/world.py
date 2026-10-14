@@ -26,7 +26,22 @@ class World:
         self.max_map_distance: float = math.hypot(map_config.width, map_config.height)
 
         self.agents: Dict[str, Agent] = {}
+        self._init_cpp_segments()
         self.reset()
+
+    def _init_cpp_segments(self):
+        """Pre-converts Python map segments into C++ Segment2D objects for zero-allocation stepping."""
+        try:
+            import deco_core_cpp
+            import numpy as np
+            self.cpp_segments = [
+                deco_core_cpp.Segment2D(np.array(s[0], dtype=np.float32), np.array(s[1], dtype=np.float32))
+                for s in self.map.segments
+            ]
+            self.has_cpp = True
+        except ImportError:
+            self.cpp_segments = None
+            self.has_cpp = False
 
     def reset(self):
         """Ajanları başlangıç noktalarına yerleştirir ve ilk algılarını günceller."""
@@ -54,6 +69,7 @@ class World:
         self.goal_pos = map_config.goal_pos
         self.goal_radius = map_config.goal_radius
         self.max_map_distance = math.hypot(map_config.width, map_config.height)
+        self._init_cpp_segments()
         self.reset()
 
     def step(self, actions: Dict[str, Tuple[float, float, float]], dt: float):
@@ -74,14 +90,24 @@ class World:
                 agent.move(move_fwd, strafe, dt)
 
         # 2. Çarpışma Çözümü (Fizik motoru adımı)
-        iterations = self.sim_config["physics"].get("collision_iterations", 2)
-        for _ in range(iterations):
+        if self.has_cpp:
+            import deco_core_cpp
+            import numpy as np
             for agent in self.agents.values():
-                for seg in self.map.segments:
-                    new_pos, has_hit = resolve_circle_segment(agent.position, agent.radius, seg)
-                    if has_hit:
-                        agent.collided = True
-                    agent.set_position(new_pos)
+                pos_arr = np.array(agent.position, dtype=np.float32)
+                res = deco_core_cpp.resolve_circle_segments(pos_arr, agent.radius, self.cpp_segments)
+                if res.collided:
+                    agent.collided = True
+                agent.set_position((float(res.new_position[0]), float(res.new_position[1])))
+        else:
+            iterations = self.sim_config["physics"].get("collision_iterations", 2)
+            for _ in range(iterations):
+                for agent in self.agents.values():
+                    for seg in self.map.segments:
+                        new_pos, has_hit = resolve_circle_segment(agent.position, agent.radius, seg)
+                        if has_hit:
+                            agent.collided = True
+                        agent.set_position(new_pos)
 
         # 3. Gözlem ve Algıları Güncelle
         self._update_perceptions()
@@ -91,7 +117,7 @@ class World:
         ray_cfg = self.agent_config["perception"]
 
         for agent in self.agents.values():
-            # Işınları hesapla ve ajanın içine ata
+            # Işınları hesapla ve ajanın içine ata (C++ hızlandırılmış)
             agent.rays = RaycastService.cast_rays(
                 origin=agent.position,
                 heading_deg=agent.angle_deg,
@@ -99,6 +125,7 @@ class World:
                 num_rays=ray_cfg["ray_count"],
                 max_dist=ray_cfg["max_distance"],
                 segments=self.map.segments,
+                cpp_segments=self.cpp_segments,
             )
 
             # Bağıl hedef vektörünü hesapla ve ajanın içine ata

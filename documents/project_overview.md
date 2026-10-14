@@ -1,86 +1,146 @@
-# DECO-SWARM: Project Overview & Scope
+# Autonomous Tactical Coordination in Decentralized Swarms via Multi-Agent Reinforcement Learning (DECO-SWARM)
 
-## 1. Project Goal & Scope
+## Academic Abstract & Research Problem Statement
 
-The primary objective of **DECO-SWARM** is to develop a Decentralized Multi-Agent Reinforcement Learning (MARL) system capable of training on consumer-grade laptop hardware within a simplified 2D tactical shooter arena. 
+Cooperative decision-making under partial observability, communication constraints, and dynamic competitive pressure remains a central challenge in autonomous multi-agent robotics and defense simulation systems. In complex spatial domains, conventional heuristic planners (e.g., behavior trees, finite-state machines, or static potential fields) fail to generalize to adversarial tactics, while fully centralized planners suffer from exponential state-space explosion and vulnerability to communication link degradation.
 
-Instead of agents (autonomous infantry or drone swarms) moving in random or independent trajectories, the goal is for agents to discover military squad doctrines autonomously (**emergent behaviors**) through restricted tactical information sharing. Target emergent behaviors include:
-- Crossfire setup and angle coverage
-- Flanking maneuvers and ambushes
-- Tactical room entry / clearing
-- Rear guard coverage and perimeter security
-
-The project follows a 28-week development roadmap, culminating in competitive 3v3 and 5v5 tactical missions (bomb defusal / area defense).
+**DECO-SWARM** investigates the emergence of decentralized tactical cooperation using **Multi-Agent Deep Reinforcement Learning (MADRL)** formulated under a **Decentralized Partially Observable Markov Decision Process (Dec-POMDP)**. The project examines how autonomous agents—operating strictly on localized ego-centric perception and low-bandwidth communication channels—can synthesize foundational tactical doctrines (such as sector coverage, dynamic crossfire positioning, bounding maneuvers, and perimeter security) in continuous 2D spatial environments without explicit rule-based choreography.
 
 ---
 
-## 2. Technology Stack & Hybrid Architecture
+## 1. Research Objectives & Key Questions
 
-To maximize training throughput while supporting visual debugging, the system adopts a hybrid architecture:
-
-- **Simulation Core (C++ Migration Target):** High-CPU loops—including geometry processing, continuous movement physics, line-segment raycasting, and bullet tunneling prevention—will reside in C++.
-- **Machine Learning (Python / PyTorch):** Neural network architectures (MLP / 1D-CNN + GRU), reward computation, MAPPO algorithm pipelines, and training execution reside in Python.
-- **Bridge (pybind11 & Zero-Copy NumPy):** High-throughput data exchange between C++ and Python avoids deep-copy serialization overhead by utilizing shared zero-copy NumPy memory buffers.
-- **Environment API Standard:** Python environments conform to **Gymnasium** (single-agent 1v0) and **PettingZoo** (multi-agent) interfaces for broad compatibility with MARL frameworks.
-- **Visualization:** During training, the simulation runs **headless** at tens of thousands of steps per second. For debugging and demonstrations, rendering is supported via **Pygame** (current prototype) and later a lightweight embedded C++ renderer (**Raylib / SFML**) at 60 FPS.
-
----
-
-## 3. Simulation & Continuous Kinematics
-
-- **Physics Model:** Instead of a discrete grid, agents operate in continuous 2D space ($x, y$) governed by continuous kinematic motion.
-- **Map Geometry:** Obstacles and walls are modeled as arbitrary line segments (supporting angled corners, narrow corridors, and rooms) rather than axis-aligned bounding boxes (AABBs).
-- **Time Scale & Decision Frequency:**
-  - **Physics Engine:** Runs at **60 Hz** ($\Delta t \approx 0.0167$ s) to prevent tunneling and provide smooth collision resolution.
-  - **Decision Frequency (Action Repeat):** Agents make decisions at **10 Hz** (every 6 physics frames, `action_repeat = 6`). Movement actions persist across 6 frames, while trigger actions are gated by weapon cooldowns.
+1. **Autonomous Tactical Synthesis (Emergent Behaviors):**
+   Can decentralized recurrent policies discover military/tactical squad doctrines (e.g., crossfire setups, flanking, corner-clearing, rear-guard defense) purely through reward incentives and competitive multi-agent pressure?
+2. **Robustness Under Bandwidth-Constrained Communication:**
+   How do low-bandwidth, discrete tactical communication tokens compare against unconstrained continuous latent communication channels in preventing message entropy collapse in CTDE frameworks?
+3. **Hardware-Efficient Recurrent Policy Training:**
+   How effectively can a hybrid compute pipeline (C++ simulation core with zero-copy shared memory paired with PyTorch GAE-PPO/MAPPO) train recurrent multi-agent policies on consumer-grade workstation/laptop hardware?
+4. **Generalization Across Topological Curricula:**
+   Can a multi-tier curriculum mitigate sample complexity and catastrophic forgetting when navigating from open Euclidean topologies to occluded, dead-end maze topologies?
 
 ---
 
-## 4. Observation Space (Ego-Centric Formulation)
+## 2. Theoretical Formulation & Mathematical Framework
 
-Agents have no global awareness of absolute map coordinates; observations are strictly ego-centric (relative to the agent's body position and orientation).
+### 2.1 Dec-POMDP Formalization
+The cooperative multi-agent environment is formalized as a Dec-POMDP defined by the tuple:
+$$\mathcal{M} = \langle \mathcal{N}, \mathcal{S}, \{\mathcal{A}_i\}, \mathcal{P}, \{R_i\}, \{\Omega_i\}, \mathcal{O}, \gamma \rangle$$
 
-The formalized observation tensor produces a **640-float vector** (`np.float32`):
+- $\mathcal{N} = \{1, \dots, N\}$: Set of autonomous agents.
+- $\mathcal{S}$: Global environment state space (positions, orientations, continuous velocities, wall segments, tactical objectives).
+- $\mathcal{A}_i$: Action space for agent $i$ (multi-discrete motor commands and discrete triggering).
+- $\mathcal{P}(s' \mid s, \mathbf{a})$: Continuous kinematic state transition probability function.
+- $R_i(s, \mathbf{a}, s')$: Shared/individual reward signals balancing task progress, survivability, and spatial coordination.
+- $\Omega_i$: Local observation space for agent $i$ (ego-centric raycasts and odometry).
+- $\mathcal{O}(o_i \mid s, a)$: Observation emission probability function modeling sensor occlusions and limited field-of-view (FOV).
+- $\gamma \in [0, 1)$: Temporal discount factor ($\gamma = 0.99$).
 
-| Block | Shape | Channels / Features | Description |
-| :--- | :--- | :--- | :--- |
-| **1. Raycast Perception** | 90 rays $\times$ 7 | $630$ floats | Normalized distance `[0.0, 1.0]`, wall flag, friend flag, enemy flag, objective flag, relative cosine, relative sine of viewed entity |
-| **2. Ego Polar Target** | 2 floats | $2$ floats | Relative distance ($r$) and relative heading ($\Delta\theta$) to current tactical objective |
-| **3. Ego Odometry & Velocities** | 3 floats | $3$ floats | Normalized linear velocities and angular velocity ($v_x, v_y, \omega$) |
-| **4. Previous Action ($a_{t-1}$)** | 3 floats | $3$ floats | Previous step's applied movement vector $(u_{\text{fwd}}, u_{\text{strafe}}, u_{\text{rot}})$ |
-| **5. Self Status** | 2 floats | $2$ floats | Normalized health (`[0.0, 1.0]`) and normalized ammo remaining (`[0.0, 1.0]`) |
-| **Total** | | **640 floats** | Zero-padding reserved at the tail for future tactical communication tokens |
+### 2.2 CTDE Paradigm (Centralized Training with Decentralized Execution)
+To handle non-stationarity in multi-agent environments while guaranteeing decentralized operational autonomy:
+- **Centralized Critic ($V_\phi(s)$):** Conditioned on the global environment state $s \in \mathcal{S}$ during training, stabilizing value estimation and variance in Generalized Advantage Estimation (GAE).
+- **Decentralized Actor ($\pi_\theta(a_i \mid o_i, h_i)$):** Evaluated strictly on the local ego-centric observation history $h_i$ produced by recurrent memory units (GRU), allowing autonomous deployment without external state knowledge.
 
-### Memory & Recurrence
-Due to Partial Observability (POMDP), agents incorporate a **Recurrent Neural Network (GRU cell)** rather than frame stacking. This maintains memory of occluded enemies, targets outside the 180° field-of-view, and avoids spinning loops in dead ends.
+```mermaid
+flowchart LR
+    subgraph Centralized Training [Training Phase (CTDE)]
+        GlobalState[Global State s] --> Critic[Centralized Critic V_phi]
+        Buffer[PPO / MAPPO Replay & GAE] --> Critic
+        Buffer --> ActorUpdate[Policy Gradient Updates]
+    end
+
+    subgraph Decentralized Execution [Deployment / Inference]
+        Obs[Local Ego Observation o_i] --> RayCNN[1D-CNN Spatial Encoder]
+        Odom[Ego Odometry & Status] --> MLP[Ego MLP Encoder]
+        RayCNN --> GRU[Recurrent Memory (GRUCell)]
+        MLP --> GRU
+        GRU --> Policy[Decentralized Policy Head pi_theta]
+        Policy --> Action[Continuous Kinematic Action a_i]
+    end
+```
 
 ---
 
-## 5. Action Space (Multi-Discrete)
+## 3. System Architecture & High-Throughput Engineering
 
-Controls map to a multi-discrete structure reflecting tactical inputs:
-1. **Movement Branch (5 choices):** `0: Idle, 1: Forward, 2: Backward, 3: Strafe Left, 4: Strafe Right`
-2. **Rotation Branch (3 choices):** `0: Hold Heading, 1: Turn Left, 2: Turn Right`
-3. **Trigger Branch (2 choices):** `0: Hold Fire, 1: Fire`
+To ensure continuous multi-agent training is feasible on modest consumer workstation hardware without requiring high-performance computing (HPC) clusters, DECO-SWARM employs a dual-language, decoupled architecture:
 
-The `ActionDecoder` in `src/engine/controllers.py` translates these discrete indices into continuous motor velocities `(move_fwd, strafe, rotate_dir)` for the physics engine.
+```
++-------------------------------------------------------------------------+
+|                              PYTHON LAYER                               |
+|  - Multi-Agent PPO / MAPPO Optimization Pipeline                        |
+|  - Recurrent Actor-Critic Models (1D-CNN + GRUCell + Multi-Discrete)    |
+|  - Gymnasium / PettingZoo AEC Environment Compliant API                 |
++------------------------------------+------------------------------------+
+                                     |  pybind11 & Zero-Copy NumPy
+                                     v
++------------------------------------+------------------------------------+
+|                         C++ SIMULATION CORE                             |
+|  - Continuous Kinematics & Sub-stepping (60 Hz Integration)             |
+|  - Analytical 2D Line-Segment Raycasting (Ray-Wall Intersections)       |
+|  - Spatial Partitioning (Grid/BVH) & Continuous Collision Detection     |
++------------------------------------+------------------------------------+
+                                     |
+                                     v
++------------------------------------+------------------------------------+
+|                         VISUALIZATION & TELEMETRY                       |
+|  - Headless Execution (>1,000 FPS for asynchronous training)            |
+|  - Optional Interactive Telemetry (Pygame / Raylib 60 FPS viewer)       |
++-------------------------------------------------------------------------+
+```
+
+### Continuous Kinematics & Temporal Discretization
+- **Kinematic Substepping:** Physics integration runs at **60 Hz** ($\Delta t \approx 16.67\text{ ms}$) to prevent spatial tunneling and ensure continuous collision resolution along arbitrary line segments.
+- **Decision Resolution (Macro-actions):** Policy inference executes at **10 Hz** via temporal action repetition ($N = 6$ physics steps per agent decision), reflecting realistic robotic actuation latencies.
 
 ---
 
-## 6. Communication & Decision Framework
+## 4. Perception & Observation Formulation
 
-- **CTDE (Centralized Training with Decentralized Execution):**
-  - **Critic (Training only):** Observes global map state, team positions, and opponent ground truth.
-  - **Actor (Execution / Deployment):** Operates purely on local ego-centric observations and received radio messages.
-- **Structured Radio Protocol:** Rather than unconstrained high-entropy float vectors (which suffer from communication collapse), agents communicate structured tactical tokens (e.g., target coordinates, distress beacons, room status).
+Observations are strictly ego-centric, avoiding reliance on global coordinate frames to guarantee invariance to spatial translation and rotation:
+
+$$\mathbf{o}_t \in \mathbb{R}^{640}$$
+
+| Feature Stream | Dimensionality | Representation | Sensor Meaning |
+| :--- | :---: | :---: | :--- |
+| **Spatial Raycast Array** | $90 \text{ rays} \times 7$ | $630$ floats | Depth range $[0, 1]$, surface hit flags (wall, ally, adversary, objective), relative incident geometry ($\cos \Delta\theta, \sin \Delta\theta$) |
+| **Ego-Polar Objective Vector** | $2$ | $2$ floats | Distance $\| \mathbf{d} \|_2$ and heading angle relative to current waypoint |
+| **Internal Odometry** | $3$ | $3$ floats | Body-frame linear velocities $(v_x, v_y)$ and rotational rate $\omega$ |
+| **Actuator Feedback ($a_{t-1}$)** | $3$ | $3$ floats | Preceding motor control signals $(u_{\text{fwd}}, u_{\text{strafe}}, u_{\text{rot}})$ |
+| **Agent State Metrics** | $2$ | $2$ floats | Normalized structural health and remaining ammunition |
+| **Tactical Comms Buffer** | Tail Padding | Reserved | Structured inter-agent communication channels |
+
+### Recurrent Temporal Memory
+To address state aliasing under severe occlusion (walls, corners, blind spots), the network integrates a **Gated Recurrent Unit (GRU)**. The recurrent hidden state $h_t \in \mathbb{R}^{128}$ enables the agent to maintain track of targets beyond its field of view and avoid dead-end cyclic loops.
 
 ---
 
-## 7. Curriculum Learning Strategy
+## 5. Staged Pedagogical Curriculum & Research Milestones
 
-To train efficiently on modest hardware without suffering from sparse-reward bottlenecks:
+Training progresses along a 4-stage empirical curriculum designed to isolate kinematic mastery from tactical coordination:
 
-1. **Phase 1 (1v0 Navigation - Current Active Milestone):** Solo agent navigation in mazes. Raycast navigation and GRU memory without enemies or teammates.
-2. **Phase 2 (1v1 Static Target Practice):** Stationary targets; learning raycast target acquisition, aiming, and ammunition economy.
-3. **Phase 3 (1v1 Dynamic Combat):** Mobile adversary; cover utilization and moving firefights.
-4. **Phase 4 (3v3 / 5v5 Swarm & Self-Play):** Teammates introduced, tactical radio active, MAPPO league self-play enabled.
+```
+[Phase 1: Ego-Kinematics & Spatial Exploration]
+     │  - Single-Agent Navigation (1v0)
+     │  - 1D-CNN + GRU Validation in Multi-Tier Mazes
+     ▼
+[Phase 2: Ballistic Engagement & Target Tracking]
+     │  - Stationary Adversary Target Practice (1v1)
+     │  - Aiming Dynamics, Raycast Acquisition, Ammunition Economy
+     ▼
+[Phase 3: Adversarial Game-Theoretic Co-Evolution]
+     │  - Dynamic 1v1 Combat & Self-Play
+     │  - Dynamic Cover Utilization, Peeking, Continuous Firefights
+     ▼
+[Phase 4: Decentralized Swarm Coordination (Dec-POMDP)]
+        - 3v3 / 5v5 Competitive Multi-Agent Scenarios
+        - Bounding Overwatch, Angle Coverage, Discrete Radio Protocols
+```
+
+---
+
+## 6. Target Academic Contributions
+
+1. **Empirical Benchmarks for Consumer Hardware MARL:** Demonstrating that structured Dec-POMDP tactical emergent behaviors can be trained under strict compute budgets without high-performance clusters.
+2. **Analysis of Topological Generalization:** Comprehensive evaluation of catastrophic forgetting and replay stabilization mechanisms across topological curricula.
+3. **Structured vs. Latent Inter-Agent Communication:** Quantitative ablation measuring the emergence of cooperative tactics under structured discrete communication tokens versus continuous latent channels.

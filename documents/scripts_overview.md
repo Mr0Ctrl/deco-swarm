@@ -51,7 +51,20 @@ The engine is **strictly headless** (zero graphical or Pygame dependencies), ena
 | [`src/engine/core/collision.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/src/engine/core/collision.py) | **Collision Resolution (Level 0)**: Implements continuous circle-segment collision resolution (`resolve_circle_segment`), sliding agents along obstacle surfaces and returning contact detection flags. |
 | [`src/engine/entities/agent.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/src/engine/entities/agent.py) | **Agent Kinematics & Observation Publishing**: Manages position, heading, velocity, health, ammo, and ray hit buffers. Publishes the formalized **640-float ego-centric observation tensor** via `get_observation()`. |
 | [`src/engine/entities/map.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/src/engine/entities/map.py) | **Map Entity**: Holds wall segments, boundaries, and spatial properties of the current map. |
-| [`src/engine/services/raycast.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/src/engine/services/raycast.py) | **Perception Service**: Computes parametric ray-segment intersection tests (`cast_rays`) for 90 rays across a 180° field-of-view, producing normalized distances and hit metadata. |
+| [`src/engine/services/raycast.py`](file:///home/mrctrl/Workspace/projects/deco-swarm/src/engine/services/raycast.py) | **Perception Service**: Computes parametric ray-segment intersection tests (`cast_rays`) for 90 rays across a 180° field-of-view, producing normalized distances and hit metadata. Automatically delegates to `deco_core_cpp` when compiled. |
+
+---
+
+## 6. High-Performance C++ Simulation Core (`cpp_core/`)
+
+| Script / File | Responsibility |
+| :--- | :--- |
+| [`cpp_core/CMakeLists.txt`](file:///home/mrctrl/Workspace/projects/deco-swarm/cpp_core/CMakeLists.txt) | **Modern CMake Build Configuration**: Configured with C++17, `-O3 -march=native` hardware optimization, Eigen3 linear algebra linking, and `pybind11` target generation. |
+| [`cpp_core/include/deco_core/geometry.hpp`](file:///home/mrctrl/Workspace/projects/deco-swarm/cpp_core/include/deco_core/geometry.hpp) | **Core Geometry Headers**: Defines `Vec2` (Eigen 2D float vector), `Segment2D`, `RayHit` (aligned 16-byte cache structure), and `EgoPolarTarget`. |
+| [`cpp_core/src/geometry.cpp`](file:///home/mrctrl/Workspace/projects/deco-swarm/cpp_core/src/geometry.cpp) | **Native Vector Math**: SIMD vector norms, angular difference calculations, and Cramer's Rule 2D cross-product ray-segment intersections. |
+| [`cpp_core/include/deco_core/collision.hpp`](file:///home/mrctrl/Workspace/projects/deco-swarm/cpp_core/include/deco_core/collision.hpp) | **Collision & Raycast Headers**: Declares circle-to-segment sliding collision resolvers and batched multi-ray sweep routines. |
+| [`cpp_core/src/collision.cpp`](file:///home/mrctrl/Workspace/projects/deco-swarm/cpp_core/src/collision.cpp) | **Continuous Collision & Batch Raycasting**: Multi-pass corner relaxation solver and sweep raycaster with pre-allocated contiguous memory. |
+| [`cpp_core/src/bindings.cpp`](file:///home/mrctrl/Workspace/projects/deco-swarm/cpp_core/src/bindings.cpp) | **Python Bindings (`pybind11`)**: Exposes C++ types (`Segment2D`, `RayHit`, `CollisionResult`) and functions (`cast_rays`, `resolve_circle_segments`) to Python with zero-copy NumPy memory bridging. |
 
 ---
 
