@@ -11,6 +11,9 @@ from models.actor_critic import RecurrentActorCritic
 from envs.single_agent_env import SingleAgentMazeEnv
 from envs.curriculum import MapCurriculum
 
+# Disable distribution validation assertions for high-throughput training
+torch.distributions.Distribution.set_default_validate_args(False)
+
 
 class RolloutBuffer:
     """

@@ -216,6 +216,12 @@ class RecurrentActorCritic(nn.Module):
         entropies = []
         values = []
 
+        # Vectorized feature extraction: flatten (seq_len * batch_size, 640)
+        # Runs the 1D-CNN and Ego-MLP across all 32 frames in a single parallel GPU forward pass!
+        flat_obs = obs_seq.view(seq_len * batch_size, -1)
+        flat_features = self.extract_features(flat_obs)
+        features_seq = flat_features.view(seq_len, batch_size, -1)
+
         hidden = initial_hidden
 
         for t in range(seq_len):
@@ -224,8 +230,13 @@ class RecurrentActorCritic(nn.Module):
                 mask = (1.0 - dones_seq[t - 1]).unsqueeze(-1)
                 hidden = hidden * mask
 
-            obs_t = obs_seq[t]
-            move_logits, rot_logits, val_t, hidden = self.forward_step(obs_t, hidden)
+            feat_t = features_seq[t]
+            next_hidden = self.gru_cell(feat_t, hidden)
+
+            actor_feat = self.actor_backbone(next_hidden)
+            move_logits = self.move_head(actor_feat)
+            rot_logits = self.rot_head(actor_feat)
+            val_t = self.critic_head(next_hidden)
 
             move_dist = Categorical(logits=move_logits)
             rot_dist = Categorical(logits=rot_logits)
@@ -239,5 +250,7 @@ class RecurrentActorCritic(nn.Module):
             log_probs.append(log_p)
             entropies.append(ent)
             values.append(val_t)
+
+            hidden = next_hidden
 
         return torch.stack(log_probs), torch.stack(entropies), torch.stack(values)
