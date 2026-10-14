@@ -24,5 +24,6 @@ walls:
     - [[500, 850], [0, 850]]
     - [[850, 500], [850, 0]]
 
-  # # Kutu siperler: [x, y, genişlik, yükseklik]
-  # boxes:
+  # Kutu siperler: [x, y, genişlik, yükseklik]
+  boxes:
+    - [300, 300, 150, 150]

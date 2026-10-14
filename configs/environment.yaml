@@ -2,24 +2,24 @@
 # RL Environment & Reward Hyperparameters
 
 episode:
-  max_steps: 250 # Maximum decision steps per episode before truncation (10 Hz)
+  max_steps: 300 # Maximum decision steps per episode before truncation (10 Hz)
   action_repeat: 6 # Physics substeps per agent decision (60 Hz / 6 = 10 Hz)
   default_map: "configs/maps/faz_1v0.1.yaml"
 
 rewards:
   # 1. Progress gradient (delta distance closed towards goal)
-  progress_weight: 0.005
+  progress_weight: 0.05
 
-  # 2. Time / step urgency penalty
-  time_penalty: -0.01
+  # 2. Immediate time penalty (set to 0.0 to prevent living penalty bleed; time is rewarded via goal efficiency)
+  time_penalty: 0.0
 
   # 3. Collision penalty when bumping into walls
-  collision_penalty: -0.02
+  collision_penalty: -0.15
 
   # 4. Episodic spatial novelty exploration
-  exploration_weight: 0.02
-  cell_size: 100.0 # Grid cell size in pixels for spatial visit tracking
+  exploration_weight: 0.10
+  cell_size: 80.0 # Grid cell size in pixels for spatial visit tracking
 
   # 5. Terminal rewards / penalties
-  goal_reward: 20.0 # Reward when agent reaches the goal perimeter
-  timeout_penalty: -3.0 # Penalty applied if agent runs out of time without reaching goal
+  goal_reward: 100.0 # Reward when agent reaches the goal perimeter
+  timeout_penalty: -5.0 # Penalty applied if agent runs out of time without reaching goal

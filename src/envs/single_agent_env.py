@@ -359,9 +359,13 @@ class SingleAgentMazeEnv(ParallelEnv):
         else:
             expl_rew = 0.0
 
-        # 5. Terminal reward or timeout penalty
+        # 5. Terminal reward (scaled by time efficiency) or timeout penalty
         if goal_reached:
-            term_rew = cfg.goal_reward
+            # Efficiency scaling: fast completions receive maximum bonus (up to 100%),
+            # while longer paths still receive a solid reward (at least 50% of goal_reward).
+            # This completely eliminates constant step-penalty bleed while rewarding fast solutions!
+            efficiency_ratio = 1.0 - (float(self.step_count) / float(self.max_steps)) * 0.5
+            term_rew = cfg.goal_reward * max(0.5, efficiency_ratio)
         elif timed_out:
             term_rew = cfg.timeout_penalty
         else:

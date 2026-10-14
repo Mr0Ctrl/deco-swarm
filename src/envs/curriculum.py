@@ -49,6 +49,8 @@ class MapCurriculum:
             name="Tier 1: Obstacles & Dead-Ends",
             description="Basic corridors and dead-end traps requiring obstacle avoidance.",
             maps=[
+                "configs/maps/faz_1v0.6.yaml",
+                "configs/maps/faz_1v0.7.yaml",
                 "configs/maps/faz_1v1.1.yaml",
                 "configs/maps/faz_1v1.2.yaml",
                 "configs/maps/faz_1v1.3.yaml",
