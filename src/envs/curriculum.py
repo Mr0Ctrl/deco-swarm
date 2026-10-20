@@ -65,12 +65,14 @@ class MapCurriculum:
             name="Tier 2: Complex Mazes",
             description="Deep occluded mazes requiring recurrent temporal memory (GRU).",
             maps=[
+                "configs/maps/faz_1v1.5.yaml",
+                "configs/maps/faz_1v1.6.yaml",
                 "configs/maps/faz_1v2.1.yaml",
                 "configs/maps/faz_1v2.2.yaml",
                 "configs/maps/faz_1v2.3.yaml",
                 "configs/maps/faz_1v2.4.yaml",
-                "configs/maps/faz_1v2.5.yaml",
-                "configs/maps/faz_1v2.6.yaml",
+                #"configs/maps/faz_1v2.5.yaml",
+                #"configs/maps/faz_1v2.6.yaml",
             ],
         ),
     ]

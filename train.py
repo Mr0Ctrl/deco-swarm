@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath("src"))
 
 from envs.curriculum import MapCurriculum
 from envs.single_agent_env import SingleAgentMazeEnv
+from envs.vec_env import VectorMazeEnv
 from models.actor_critic import RecurrentActorCritic
 from training.ppo import PPOTrainer
 
@@ -28,6 +29,7 @@ def parse_args():
     parser.add_argument("--resume", type=str, default="", help="Path to checkpoint (.pt) to resume training from")
     parser.add_argument("--tier", type=int, default=-1, help="Force curriculum tier (0 for faz_1v0.*, 1 for faz_1v1.*, etc.)")
     parser.add_argument("--lock-tier", action="store_true", help="Lock the chosen tier (prevent promotion/demotion)")
+    parser.add_argument("--num-envs", type=int, default=4, help="Number of parallel environments to run on different maps")
     parser.add_argument("--device", type=str, default="auto", help="Device: cuda, cpu, or auto")
     return parser.parse_args()
 
@@ -63,7 +65,11 @@ def main():
 
     # 1. Initialize Sub-Curriculum and Environment
     curriculum = MapCurriculum(sample_mode="random")
-    env = SingleAgentMazeEnv(curriculum=curriculum)
+    if args.num_envs > 1:
+        print(f"Parallel Envs:    {args.num_envs} concurrent environments on diverse maps")
+        env = VectorMazeEnv(num_envs=args.num_envs, curriculum=curriculum)
+    else:
+        env = SingleAgentMazeEnv(curriculum=curriculum)
 
     # 2. Initialize Model
     model = RecurrentActorCritic().to(device)
@@ -99,9 +105,14 @@ def main():
     )
 
     # 4. Prepare initial state & Best Model Tracking
-    obs_dict, _ = env.reset()
-    current_obs = torch.tensor(obs_dict["agent_0"], dtype=torch.float32, device=device)
-    current_hidden = model.initial_hidden_state(batch_size=1, device=device)
+    if args.num_envs > 1:
+        init_obs_np = env.reset()
+        current_obs = torch.tensor(init_obs_np, dtype=torch.float32, device=device)
+        current_hidden = model.initial_hidden_state(batch_size=args.num_envs, device=device)
+    else:
+        obs_dict, _ = env.reset()
+        current_obs = torch.tensor(obs_dict["agent_0"], dtype=torch.float32, device=device).unsqueeze(0)
+        current_hidden = model.initial_hidden_state(batch_size=1, device=device)
 
     start_time = time.time()
     last_save_step = 0
@@ -152,7 +163,8 @@ def main():
         train_metrics = trainer.train_epoch()
 
         iter_time = time.time() - iter_start
-        fps = int(args.rollout_steps / max(1e-5, iter_time))
+        steps_this_iter = args.rollout_steps * args.num_envs
+        fps = int(steps_this_iter / max(1e-5, iter_time))
 
         succ_rate = curriculum.success_rate
         avg_steps = curriculum.avg_steps

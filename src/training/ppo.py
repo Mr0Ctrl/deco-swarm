@@ -1,7 +1,7 @@
 # src/training/ppo.py
 import os
 import time
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
@@ -9,6 +9,7 @@ from torch.optim import Adam
 
 from models.actor_critic import RecurrentActorCritic
 from envs.single_agent_env import SingleAgentMazeEnv
+from envs.vec_env import VectorMazeEnv
 from envs.curriculum import MapCurriculum
 
 # Disable distribution validation assertions for high-throughput training
@@ -18,10 +19,20 @@ torch.distributions.Distribution.set_default_validate_args(False)
 class RolloutBuffer:
     """
     Stores sequential trajectories for Recurrent PPO with GAE calculation.
+    Supports batched environments (num_steps, num_envs, ...).
     """
 
-    def __init__(self, buffer_size: int, obs_dim: int, act_dim: int, hidden_dim: int, device: torch.device):
-        self.buffer_size = buffer_size
+    def __init__(
+        self,
+        num_steps: int,
+        num_envs: int,
+        obs_dim: int,
+        act_dim: int,
+        hidden_dim: int,
+        device: torch.device,
+    ):
+        self.num_steps = num_steps
+        self.num_envs = num_envs
         self.obs_dim = obs_dim
         self.act_dim = act_dim
         self.hidden_dim = hidden_dim
@@ -30,44 +41,44 @@ class RolloutBuffer:
         self.reset()
 
     def reset(self):
-        self.obs = torch.zeros((self.buffer_size, self.obs_dim), dtype=torch.float32, device=self.device)
-        self.actions = torch.zeros((self.buffer_size, self.act_dim), dtype=torch.long, device=self.device)
-        self.rewards = torch.zeros(self.buffer_size, dtype=torch.float32, device=self.device)
-        self.dones = torch.zeros(self.buffer_size, dtype=torch.float32, device=self.device)
-        self.values = torch.zeros(self.buffer_size, dtype=torch.float32, device=self.device)
-        self.log_probs = torch.zeros(self.buffer_size, dtype=torch.float32, device=self.device)
-        self.hiddens = torch.zeros((self.buffer_size, self.hidden_dim), dtype=torch.float32, device=self.device)
+        self.obs = torch.zeros((self.num_steps, self.num_envs, self.obs_dim), dtype=torch.float32, device=self.device)
+        self.actions = torch.zeros((self.num_steps, self.num_envs, self.act_dim), dtype=torch.long, device=self.device)
+        self.rewards = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32, device=self.device)
+        self.dones = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32, device=self.device)
+        self.values = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32, device=self.device)
+        self.log_probs = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32, device=self.device)
+        self.hiddens = torch.zeros((self.num_steps, self.num_envs, self.hidden_dim), dtype=torch.float32, device=self.device)
 
-        self.advantages = torch.zeros(self.buffer_size, dtype=torch.float32, device=self.device)
-        self.returns = torch.zeros(self.buffer_size, dtype=torch.float32, device=self.device)
+        self.advantages = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32, device=self.device)
+        self.returns = torch.zeros((self.num_steps, self.num_envs), dtype=torch.float32, device=self.device)
 
         self.ptr = 0
 
     def add(
         self,
-        obs: torch.Tensor,
-        action: torch.Tensor,
-        reward: float,
-        done: bool,
-        value: float,
-        log_prob: float,
-        hidden: torch.Tensor,
+        obs: torch.Tensor,       # (num_envs, obs_dim)
+        action: torch.Tensor,    # (num_envs, act_dim)
+        reward: torch.Tensor,    # (num_envs,)
+        done: torch.Tensor,      # (num_envs,)
+        value: torch.Tensor,     # (num_envs,)
+        log_prob: torch.Tensor,  # (num_envs,)
+        hidden: torch.Tensor,    # (num_envs, hidden_dim)
     ):
         self.obs[self.ptr] = obs
         self.actions[self.ptr] = action
         self.rewards[self.ptr] = reward
-        self.dones[self.ptr] = float(done)
+        self.dones[self.ptr] = done
         self.values[self.ptr] = value
         self.log_probs[self.ptr] = log_prob
         self.hiddens[self.ptr] = hidden
 
         self.ptr += 1
 
-    def compute_gae(self, last_val: float, gamma: float = 0.99, gae_lambda: float = 0.95):
-        """Computes Generalized Advantage Estimation (GAE) and TD targets."""
-        last_gae = 0.0
-        for t in reversed(range(self.buffer_size)):
-            if t == self.buffer_size - 1:
+    def compute_gae(self, last_val: torch.Tensor, gamma: float = 0.99, gae_lambda: float = 0.95):
+        """Computes Generalized Advantage Estimation (GAE) across all parallel environments."""
+        last_gae = torch.zeros(self.num_envs, device=self.device)
+        for t in reversed(range(self.num_steps)):
+            if t == self.num_steps - 1:
                 next_non_terminal = 1.0 - self.dones[t]
                 next_val = last_val
             else:
@@ -83,12 +94,12 @@ class RolloutBuffer:
 
 class PPOTrainer:
     """
-    Recurrent PPO Trainer integrating Sub-Curriculum and Episodic Exploration.
+    Recurrent PPO Trainer supporting both SingleAgentMazeEnv and VectorMazeEnv (parallel maps).
     """
 
     def __init__(
         self,
-        env: SingleAgentMazeEnv,
+        env: Union[SingleAgentMazeEnv, VectorMazeEnv],
         model: RecurrentActorCritic,
         device: torch.device,
         lr: float = 3e-4,
@@ -106,7 +117,11 @@ class PPOTrainer:
         self.model = model
         self.device = device
 
-        self.rollout_steps = rollout_steps
+        self.is_vector_env = isinstance(env, VectorMazeEnv)
+        self.num_envs = env.num_envs if self.is_vector_env else 1
+
+        # rollout_steps is the total steps per environment per update
+        self.num_steps = rollout_steps
         self.batch_seq_len = batch_seq_len
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -118,7 +133,8 @@ class PPOTrainer:
 
         self.optimizer = Adam(self.model.parameters(), lr=lr, eps=1e-5)
         self.buffer = RolloutBuffer(
-            buffer_size=rollout_steps,
+            num_steps=self.num_steps,
+            num_envs=self.num_envs,
             obs_dim=640,
             act_dim=2,
             hidden_dim=model.hidden_dim,
@@ -132,93 +148,117 @@ class PPOTrainer:
 
     def collect_rollouts(
         self,
-        current_obs: torch.Tensor,
-        current_hidden: torch.Tensor,
+        current_obs: torch.Tensor,     # (num_envs, 640)
+        current_hidden: torch.Tensor,  # (num_envs, hidden_dim)
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Executes policy in environment for rollout_steps and stores experience.
+        Executes policy across all N environments in parallel and stores experiences.
         """
         self.buffer.reset()
         obs = current_obs
         hidden = current_hidden
 
-        for _ in range(self.rollout_steps):
-            self.global_step += 1
+        for _ in range(self.num_steps):
+            self.global_step += self.num_envs
 
-            # Select action
+            # Batched action selection on GPU
             with torch.no_grad():
-                action, log_prob, val, next_hidden = self.model.get_action(obs.unsqueeze(0), hidden)
+                action, log_prob, val, next_hidden = self.model.get_action(obs, hidden)
 
-            action_np = action.cpu().numpy()[0]
-            val_scalar = val.item()
-            log_prob_scalar = log_prob.item()
+            action_np = action.cpu().numpy()
+            val_tensor = val.squeeze(-1)  # (num_envs,)
 
-            # Step environment
-            next_obs_dict, rewards_dict, terms_dict, truncs_dict, infos_dict = self.env.step(
-                {"agent_0": action_np}
-            )
+            if self.is_vector_env:
+                next_obs_np, rewards_np, dones_np, _ = self.env.step(action_np)
 
-            reward = rewards_dict["agent_0"]
-            done = terms_dict["agent_0"] or truncs_dict["agent_0"]
+                reward_tensor = torch.tensor(rewards_np, dtype=torch.float32, device=self.device)
+                done_tensor = torch.tensor(dones_np, dtype=torch.float32, device=self.device)
+                next_obs_tensor = torch.tensor(next_obs_np, dtype=torch.float32, device=self.device)
 
-            # Store in buffer
+                # Reset hidden state for sub-environments that finished
+                if dones_np.any():
+                    done_mask = (1.0 - done_tensor).unsqueeze(-1)
+                    hidden = next_hidden * done_mask
+                else:
+                    hidden = next_hidden
+
+                next_obs = next_obs_tensor
+            else:
+                # Single environment fallback
+                next_obs_dict, rewards_dict, terms_dict, truncs_dict, _ = self.env.step({"agent_0": action_np[0]})
+                reward = rewards_dict["agent_0"]
+                done = terms_dict["agent_0"] or truncs_dict["agent_0"]
+
+                reward_tensor = torch.tensor([reward], dtype=torch.float32, device=self.device)
+                done_tensor = torch.tensor([float(done)], dtype=torch.float32, device=self.device)
+
+                if done:
+                    reset_obs_dict, _ = self.env.reset()
+                    next_obs = torch.tensor(reset_obs_dict["agent_0"], dtype=torch.float32, device=self.device).unsqueeze(0)
+                    hidden = self.model.initial_hidden_state(batch_size=1, device=self.device)
+                else:
+                    next_obs = torch.tensor(next_obs_dict["agent_0"], dtype=torch.float32, device=self.device).unsqueeze(0)
+                    hidden = next_hidden
+
+            # Store in rollout buffer
             self.buffer.add(
                 obs=obs,
-                action=action[0],
-                reward=reward,
-                done=done,
-                value=val_scalar,
-                log_prob=log_prob_scalar,
-                hidden=hidden[0],
+                action=action,
+                reward=reward_tensor,
+                done=done_tensor,
+                value=val_tensor,
+                log_prob=log_prob,
+                hidden=hidden,
             )
 
-            if done:
-                reset_obs_dict, _ = self.env.reset()
-                obs = torch.tensor(reset_obs_dict["agent_0"], dtype=torch.float32, device=self.device)
-                hidden = self.model.initial_hidden_state(batch_size=1, device=self.device)
-            else:
-                obs = torch.tensor(next_obs_dict["agent_0"], dtype=torch.float32, device=self.device)
-                hidden = next_hidden
+            obs = next_obs
 
-        # Estimate value for final step to bootstrap GAE
+        # Bootstrap value for final step to compute GAE
         with torch.no_grad():
-            _, _, last_val, _ = self.model.forward_step(obs.unsqueeze(0), hidden)
-            last_val_scalar = last_val.item()
+            _, _, last_val, _ = self.model.forward_step(obs, hidden)
+            last_val_tensor = last_val.squeeze(-1)
 
-        self.buffer.compute_gae(last_val=last_val_scalar, gamma=self.gamma, gae_lambda=self.gae_lambda)
+        self.buffer.compute_gae(last_val=last_val_tensor, gamma=self.gamma, gae_lambda=self.gae_lambda)
 
         return obs, hidden
 
     def train_epoch(self) -> Dict[str, float]:
         """
-        Executes PPO updates unrolling through sequence chunks.
+        Executes PPO updates unrolling through sequence chunks across all parallel environments.
         """
-        # Normalize advantages
         advantages = self.buffer.advantages
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        num_seqs = self.rollout_steps // self.batch_seq_len
+        # Chunks: (num_steps // batch_seq_len, num_envs)
+        num_seqs_per_env = self.num_steps // self.batch_seq_len
+        total_chunks = num_seqs_per_env * self.num_envs
+
         policy_losses, value_losses, entropy_losses = [], [], []
 
         for _ in range(self.update_epochs):
-            # Shuffle sequence starting indices
-            seq_indices = np.random.permutation(num_seqs)
+            # Create all (start_step, env_idx) chunk pairs and shuffle
+            chunk_pairs = [
+                (s * self.batch_seq_len, e)
+                for s in range(num_seqs_per_env)
+                for e in range(self.num_envs)
+            ]
+            np.random.shuffle(chunk_pairs)
 
-            for idx in seq_indices:
-                start_t = idx * self.batch_seq_len
+            # Mini-batch chunk iteration
+            for start_t, env_idx in chunk_pairs:
                 end_t = start_t + self.batch_seq_len
 
-                chunk_obs = self.buffer.obs[start_t:end_t].unsqueeze(1)  # (seq_len, 1, 640)
-                chunk_actions = self.buffer.actions[start_t:end_t].unsqueeze(1)  # (seq_len, 1, 2)
-                chunk_dones = self.buffer.dones[start_t:end_t].unsqueeze(1)  # (seq_len, 1)
-                chunk_old_log_probs = self.buffer.log_probs[start_t:end_t]  # (seq_len,)
-                chunk_old_values = self.buffer.values[start_t:end_t]  # (seq_len,)
-                chunk_advs = advantages[start_t:end_t]  # (seq_len,)
-                chunk_returns = self.buffer.returns[start_t:end_t]  # (seq_len,)
+                chunk_obs = self.buffer.obs[start_t:end_t, env_idx].unsqueeze(1)  # (seq_len, 1, 640)
+                chunk_actions = self.buffer.actions[start_t:end_t, env_idx].unsqueeze(1)  # (seq_len, 1, 2)
+                chunk_dones = self.buffer.dones[start_t:end_t, env_idx].unsqueeze(1)  # (seq_len, 1)
+                chunk_old_log_probs = self.buffer.log_probs[start_t:end_t, env_idx]  # (seq_len,)
+                chunk_old_values = self.buffer.values[start_t:end_t, env_idx]  # (seq_len,)
+                chunk_advs = advantages[start_t:end_t, env_idx]  # (seq_len,)
+                chunk_returns = self.buffer.returns[start_t:end_t, env_idx]  # (seq_len,)
 
-                initial_hidden = self.buffer.hiddens[start_t].unsqueeze(0)  # (1, hidden_dim)
+                initial_hidden = self.buffer.hiddens[start_t, env_idx].unsqueeze(0)  # (1, hidden_dim)
 
-                # Unroll model over chunk
+                # Unroll model over sequence chunk
                 new_log_probs, entropy, new_values = self.model.evaluate_actions(
                     chunk_obs, initial_hidden, chunk_actions, chunk_dones
                 )
@@ -244,7 +284,7 @@ class PPOTrainer:
                 vf_loss_clipped = (v_clipped - chunk_returns) ** 2
                 vf_loss = 0.5 * torch.max(vf_loss_unclipped, vf_loss_clipped).mean()
 
-                # Entropy Loss (encourages exploration)
+                # Entropy Loss
                 ent_loss = entropy.mean()
 
                 total_loss = pg_loss + self.vf_coef * vf_loss - self.ent_coef * ent_loss
