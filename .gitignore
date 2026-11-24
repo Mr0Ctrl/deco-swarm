@@ -219,3 +219,4 @@ __marimo__/
 
 # RL Checkpoints
 checkpoints/
+.venv

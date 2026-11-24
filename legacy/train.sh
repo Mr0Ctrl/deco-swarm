@@ -1,5 +1,5 @@
 source venv/bin/activate
-    python3 train.py \
+    python3 legacy/train.py \
       --resume checkpoints/model_latest.pt \
       --tier 0 \
       --total-timesteps 100000 \
