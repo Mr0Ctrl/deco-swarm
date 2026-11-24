@@ -115,14 +115,12 @@ deco-swarm/
 │   └── maps/                     # Curriculum maps (faz_1v0.*, faz_1v1.*, faz_1v2.*)
 │
 ├── documents/                    # Comprehensive system documentation
-│   ├── quickstart_guide.md       # Friendly training & testing reference guide
-│   ├── scripts_overview.md       # Purpose of every script across the codebase
-│   ├── model_architecture.md     # 1D-CNN + GRU late-fusion design & alternatives
-│   ├── environment_rules.md      # Reward math, goal rules, and curriculum criteria
-│   ├── project_overview.md       # Scope, MARL doctrine, and kinematics
-│   ├── architecture.md           # Clean architecture layers & decoupling
-│   ├── roadmap.md                # 28-week development plan & milestones
-│   └── risks.md                  # RL pathologies, retraining risks, and solutions
+│   ├── README.md                 # System overview & documentation index
+│   ├── 01_configuration_and_arenas.md      # Configuration philosophy & 2D arena design
+│   ├── 02_simulation_and_perception.md     # Headless 2D physics & ego-centric sensors
+│   ├── 03_environment_rewards_and_curriculum.md  # MDP loop, shaped rewards & curriculum
+│   ├── 04_agent_architecture_and_training.md     # Modular late-fusion + GRU, PPO & checkpoint safety
+│   └── 05_visualization_and_interaction.md       # Decoupled 2D viewer, camera & playback modes
 │
 ├── src/                          # Main source package
 │   ├── engine/                   # Pure headless physics core (NO Pygame)
@@ -154,15 +152,13 @@ deco-swarm/
 
 ## Documentation Index
 
-Detailed specifications and architectural deep dives can be found in [`documents/`](documents/):
-- **[Quickstart Guide](documents/quickstart_guide.md)**: Friendly guide with all commands, flags, and reward tuning tips.
-- **[Scripts Overview](documents/scripts_overview.md)**: Explanation of every file and module across the codebase.
-- **[Model Architecture Guide](documents/model_architecture.md)**: Deep dive into the 1D-CNN, GRU, and alternative models.
-- **[Environment Rules & Rewards](documents/environment_rules.md)**: Exact mathematical formulations for rewards and curriculum.
-- **[Project Overview](documents/project_overview.md)**: Project scope, emergent squad tactics, and MARL goals.
-- **[Architecture & Clean Layering](documents/architecture.md)**: Principles of clean layering and decoupling.
-- **[28-Week Roadmap](documents/roadmap.md)**: Chronological project timeline and phase progression.
-- **[Technical Risks & Pathologies](documents/risks.md)**: Retraining risks, POMDP pitfalls, and mitigation strategies.
+Detailed architecture and design documentation can be found in [`documents/`](documents/README.md):
+- **[System Overview & Index](documents/README.md)**: Core architectural pillars, end-to-end flow, and v2 JAX CTF evolution guide.
+- **[01. Configuration & Arenas](documents/01_configuration_and_arenas.md)**: Tunable parameter domains and unified 2D line-segment arena representation.
+- **[02. Simulation & Perception](documents/02_simulation_and_perception.md)**: Two-timescale headless physics, sliding collisions, semantic raycasts, and ego-polar bearings.
+- **[03. Environment, Rewards & Curriculum](documents/03_environment_rewards_and_curriculum.md)**: Episodic macro-steps, termination vs. truncation, shaped rewards, and progressive curriculum.
+- **[04. Agent Architecture & Training](documents/04_agent_architecture_and_training.md)**: Modular late-fusion + GRU design, recurrent PPO, and the 5-rule checkpoint/recovery system.
+- **[05. Visualization & Interaction](documents/05_visualization_and_interaction.md)**: Read-only 2D viewer, camera transforms, layered rendering, and human/AI modes.
 
 ---
 
