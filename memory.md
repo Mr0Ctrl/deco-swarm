@@ -33,11 +33,20 @@ _Last updated: 2026-11-28_
   - We continue our own path in `src/deco_swarm/` and do NOT adopt main's code.
 - **Phase 0.5 done:** strict loader + 10 tests, `uv run pytest` gives 13 passed. Committed `b102c65`.
   - `pyyaml` added to pyproject.
-- **Phase 0.6 done:** arena compiler + 9 tests, `uv run pytest` gives 22 passed. Not committed yet (user's call).
-- **Phase 0.7 in progress:** run JaxMARL MAPPO-RNN outside the repo (~/refs/JaxMARL, its own venv). Read it with the focus list Claude gave: env API, auto-reset, scan carry, GRU reset, GAE, minibatch, global state. Measure SPS. Notes go in `documents/notes/jaxmarl_notlari.md` (user writes).
-- Then 0.8 GAE (`training/gae.py`) and 0.9 SIM_CONTRACT.
+- **Phase 0.6 done:** arena compiler + 9 tests, `uv run pytest` gives 22 passed. Committed `5839d34`.
+- **Phase 0.7 done (lightweight):** the JaxMARL MAPPO-RNN MPE run works on our GPU. Real VRAM about 1 GB. Return went from -88 to about -47 within 0.8M steps, so it is learning.
+  - The user doesn't want to read the source. Claude brings JaxMARL patterns into the code it gives (GAE now; rollout, GRU reset and minibatching in Phase 2).
+  - No notes file needed.
+- **Phase 0.8 done:** GAE + 4 tests, `uv run pytest` gives 26 passed. Not committed yet. Claude gave GAE learning resources.
+- **Phase 0.9 in progress:** `documents/SIM_CONTRACT.md` v0 (the user writes it from Claude's draft). Proposed decisions:
+  - +y up, angle CCW from +x (differs from main's +y down)
+  - 15 Hz decisions
+  - actions are multi-discrete [move 3, strafe 3, turn 3, fire 2]; fire is a no-op while the laser is disabled
+  - obs = 90 rays × 10 + 6 ego + 10 self = 916
+  - the 4500-step time limit counts as `terminated` (time_left is in obs, the match really ends) → no truncation fix needed in GAE
+- Next: Phase 0 gate check, then Phase 1.
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
 - Go phase by phase. One commit per sub-phase, made by the user.
-- Guidance style: for each step Claude gives the goal, **why it's needed and where it's used in the project**, near-final code (in chat) and a short explanation. The user types it in. No quizzes or exercises.
+- Guidance style: learn by writing, not by reading external source code. For each step Claude gives the goal, **why it's needed and where it's used in the project**, near-final code (in chat) and a short explanation. The user types it in. No quizzes or exercises.
