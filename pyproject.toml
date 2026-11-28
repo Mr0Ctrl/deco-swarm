@@ -8,6 +8,7 @@ dependencies = [
     "optax>=0.2.9",
     "numpy",
     "pyyaml>=6.0.4",
+    "pygame>=2.6.1",
 ]
 
 [dependency-groups]
