@@ -1,0 +1,14 @@
+body:
+  radius: 10.0
+  linear_speed: 180.0
+  angular_speed: 200.0
+
+perception:
+  ray_count: 90
+  fov_degrees: 180.0
+  max_distance: 500.0
+
+tagger:
+  range: 250.0
+  cooldown_sec: 0.8
+  respawn_sec: 2.5
