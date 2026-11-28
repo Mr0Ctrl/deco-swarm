@@ -57,9 +57,12 @@ _Last updated: 2026-11-28_
 - **1.1 done:** kinematics, 33 tests passed, commit `85dcb17`.
 - **1.2 done:** collision, 42 tests passed, commit `3b1b316`.
 - **1.3 done:** raycast, 48 tests passed, commit `e548afa`. Carried flags are invisible to rays; distances are in meters.
-- **1.4 in progress:** Claude gave `sim/state.py` and `sim/rules.py` + `tests/test_rules.py` (9 tests). Prototype passed 9/9.
-  - `state.py`: `EnvState`, `Events`, HOME/CARRIED/STRAY, `agent_team`, `carrying_mask`, `initial_state`.
-  - `rules.py`: `apply_rules`. Both flags update together. Order: follow → return → pickup → auto-return → capture. Return beats pickup in the same tick.
+- **1.4 done:** state + rules, 57 tests passed, commit `b5f6cf0`.
+- **1.5 in progress:** Claude gave `envs/ctf_env.py` (`CTFEnv`) and `tests/test_env.py` (6 tests). Prototype passed 6/6.
+  - `CTFEnv` methods: `reset`, `step`, `get_obs`, `_tick`, `_is_over`, `_reward`.
+  - Arrays API: actions (N, 4), obs (N, 916). Auto-reset happens inside `step`.
+  - Reward: zero-sum capture, plus pickup/return, plus win/loss at the end. Exploration and collision shaping are deferred to Phase 2.
+  - Includes the symmetry test (red_0 obs == blue_0 obs).
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
