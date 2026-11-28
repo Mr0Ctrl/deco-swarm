@@ -2,18 +2,16 @@ import jax
 import numpy as np
 import pygame
 
-from deco_swarm.sim.raycast import ALLY, ENEMY, ENEMY_BASE, ENEMY_FLAG, NONE, OWN_BASE, OWN_FLAG, WALL, cast_rays
+from deco_swarm.sim.raycast import ALLY, ENEMY, NONE, OPP, OWN, WALL, cast_rays
 from deco_swarm.sim.state import CARRIED, STRAY, carrying_mask
 
 BG = (25, 25, 30)
 WALL_COLOR = (200, 200, 200)
 TEAM_COLORS = [(220, 70, 70), (70, 120, 235)]        # red, blue
 BASE_COLORS = [(90, 35, 35), (35, 50, 95)]
-RAY_COLORS = {
-    WALL: (120, 120, 120), ALLY: (80, 220, 80), ENEMY: (255, 150, 0),
-    OWN_FLAG: (255, 255, 0), ENEMY_FLAG: (255, 0, 255),
-    OWN_BASE: (0, 200, 200), ENEMY_BASE: (200, 0, 200),
-}
+SOLID_COLORS = {WALL: (120, 120, 120), ALLY: (80, 220, 80), ENEMY: (255, 150, 0)}
+FLAG_COLORS = {OWN: (255, 255, 0), OPP: (255, 0, 255)}
+BASE_COLORS_RAY = {OWN: (0, 200, 200), OPP: (200, 0, 200)}
 
 
 class Viewer:
@@ -66,16 +64,22 @@ class Viewer:
                 pygame.draw.line(scr, WALL_COLOR, self.to_screen(seg[:2]), self.to_screen(seg[2:]), 2)
 
         if show_rays:                                                     # rays of the selected agent
-            dist, cls, _ = jax.device_get(self._rays(state))
+            hits = jax.device_get(self._rays(state))
             p = env.cfg.agent.perception
             rel = np.linspace(-p.fov_deg / 2, p.fov_deg / 2, p.ray_count)
             ang = np.deg2rad(s.heading_deg[selected] + rel)
             o = s.pos[selected]
-            for d, c, th in zip(dist[selected], cls[selected], ang):
-                if c == NONE:
-                    continue
-                end = o + d * np.array([np.cos(th), np.sin(th)])
-                pygame.draw.line(scr, RAY_COLORS[int(c)], self.to_screen(o), self.to_screen(end), 1)
+            for r, th in enumerate(ang):
+                u = np.array([np.cos(th), np.sin(th)])
+                c = int(hits.solid_cls[selected, r])
+                if c != NONE:                                             # solid layer: line
+                    end = o + hits.solid_dist[selected, r] * u
+                    pygame.draw.line(scr, SOLID_COLORS[c], self.to_screen(o), self.to_screen(end), 1)
+                for cls, dist, colors in ((hits.flag_cls, hits.flag_dist, FLAG_COLORS),
+                                          (hits.base_cls, hits.base_dist, BASE_COLORS_RAY)):
+                    c = int(cls[selected, r])
+                    if c != NONE:                                         # object layers: dot
+                        pygame.draw.circle(scr, colors[c], self.to_screen(o + dist[selected, r] * u), 3)
 
         carrying = jax.device_get(carrying_mask(state.flag_state, state.flag_carrier, env.num_agents))
         for i in range(env.num_agents):                                   # agents

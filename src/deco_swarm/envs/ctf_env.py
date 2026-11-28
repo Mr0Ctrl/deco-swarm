@@ -5,13 +5,14 @@ from deco_swarm.config import ConfigError
 from deco_swarm.config.arena import Arena
 from deco_swarm.config.schema import Configs
 from deco_swarm.sim.collision import collide
-from deco_swarm.sim.kinematics import integrate
-from deco_swarm.sim.raycast import NUM_CLASSES, cast_rays
+from deco_swarm.sim.kinematics import decode_actions, integrate
+from deco_swarm.sim.raycast import RAY_FEATURES, cast_rays, ray_features
 from deco_swarm.sim.rules import apply_rules
 from deco_swarm.sim.state import CARRIED, EnvState, Events, agent_team, carrying_mask, initial_state
 
 NUM_EGO_TARGETS = 2 # own_base, enemy_flag
 NUM_SELF = 10
+NUM_PREV_ACTION = 4
 
 class CTFEnv:
     """2-team CTF on one arena. Pure functions of (key, state, actions): jit/vmap from outside."""
@@ -24,7 +25,7 @@ class CTFEnv:
         self.team = agent_team(self.num_agents)
         self.dt = 1.0 / cfg.simulation.physics.tick_hz
         p = cfg.agent.perception
-        self.obs_size = p.ray_count * (NUM_CLASSES + 2) + 3 * NUM_EGO_TARGETS + NUM_SELF
+        self.obs_size = p.ray_count * RAY_FEATURES + 3 * NUM_EGO_TARGETS + NUM_SELF + NUM_PREV_ACTION
         self.action_dims = (3, 3, 3, 2)
         if int(arena.spawn_mask.sum(axis=1).min()) < self.team_size:
             raise ConfigError(f"arena has fewer spawns than team_size={self.team_size}")
@@ -59,7 +60,7 @@ class CTFEnv:
         n = self.num_agents
         no_ev = Events(*(jnp.zeros(n, bool) for _ in Events._fields))
         (state, _, ev), _ = jax.lax.scan(self._tick, (state, actions, no_ev), None, length=self.cfg.environment.episode.action_repeat)
-        state = state._replace(step=state.step + 1)
+        state = state._replace(step=state.step + 1, prev_action=actions.astype(jnp.int32))
 
         terminated = self._is_over(state)
         reward = self._reward(state, ev, terminated)
@@ -95,9 +96,9 @@ class CTFEnv:
         f32 = jnp.float32
         carrying = carrying_mask(state.flag_state, state.flag_carrier, n)
 
-        # 1) rays: [dist / range, class one-hot, carrier] per ray
-        dist, cls, carrier = cast_rays(state.pos, state.heading_deg, state.alive, carrying, team, state.flag_pos, state.flag_state != CARRIED, self.arena, cfg.agent.body.radius_m, p)
-        rays = jnp.concatenate([(dist / p.max_range_m)[..., None], jax.nn.one_hot(cls, NUM_CLASSES), carrier[..., None].astype(f32)], axis=-1).reshape(n, -1)
+        # 1) rays: 3 groups (solid / flag / base), RAY_FEATURES values per ray
+        hits = cast_rays(state.pos, state.heading_deg, state.alive, carrying, team, state.flag_pos, state.flag_state != CARRIED, self.arena, cfg.agent.body.radius_m, p)
+        rays = ray_features(hits, p.max_range_m).reshape(n, -1)
 
         # 2) ego bearings to own base and enemy flag: [cos, sin, dist / diagonal], heading-relative
         targets = jnp.stack([self.arena.base[team, :2], state.flag_pos[other]], axis=1) # (N, 2, 2)
@@ -116,4 +117,7 @@ class CTFEnv:
             (state.tag_cooldown / cfg.agent.tagger.cooldown_s)[:, None],
             jnp.full((n, 1), 1.0 - state.step / ep.max_steps), # time left
         ], axis=-1)
-        return jnp.concatenate([rays, ego, selfs], axis=-1).astype(f32)
+
+        fwd, left, turn, fire = decode_actions(state.prev_action)
+        prev = jnp.stack([fwd, left, turn, fire.astype(f32)], axis=-1)
+        return jnp.concatenate([rays, ego, selfs, prev], axis=-1).astype(f32)

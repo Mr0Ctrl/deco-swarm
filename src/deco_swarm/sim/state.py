@@ -18,6 +18,7 @@ class EnvState(NamedTuple):
     stray_timer: jax.Array # (2,)   seconds on the ground
     score: jax.Array # (2,) int
     step: jax.Array # () int  decision steps
+    prev_action: jax.Array # (N, 4) int  last action (part of the observation)
 
 class Events(NamedTuple):
     picked_up: jax.Array # (N,) bool
@@ -47,4 +48,5 @@ def initial_state(pos, heading_deg, flag_stand):
         stray_timer=jnp.zeros(2),
         score=jnp.zeros(2, jnp.int32),
         step=jnp.array(0, jnp.int32),
+        prev_action=jnp.zeros((n, 4), jnp.int32),
     )

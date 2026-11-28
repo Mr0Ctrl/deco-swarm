@@ -22,9 +22,9 @@ def random_actions(key):
 
 def test_shapes():
     obs, state = ENV.reset(jax.random.key(0))
-    assert obs.shape == (N, ENV.obs_size) == (N, 916)
+    assert obs.shape == (N, ENV.obs_size) == (N, 1010)
     obs, state, reward, term, trunc, info = ENV.step(jax.random.key(1), state, NOOP)
-    assert obs.shape == (N, 916) and reward.shape == (N,)
+    assert obs.shape == (N, ENV.obs_size) and reward.shape == (N,)
     assert term.shape == () and trunc.shape == ()
 
 
@@ -82,4 +82,13 @@ def test_jit_vmap_many_envs():
     obs, state = jax.vmap(ENV.reset)(keys)
     actions = jax.vmap(random_actions)(keys)
     obs, state, reward, term, trunc, info = jax.jit(jax.vmap(ENV.step))(keys, state, actions)
-    assert obs.shape == (B, N, 916) and reward.shape == (B, N) and term.shape == (B,)
+    assert obs.shape == (B, N, ENV.obs_size) and reward.shape == (B, N) and term.shape == (B,)
+
+
+def test_prev_action_is_stored_and_observed():
+    _, state = ENV.reset(jax.random.key(0))
+    act = NOOP.at[0].set(jnp.array([1, 2, 1, 1]))                 # forward, right, left turn, fire
+    obs, state, *_ = ENV.step(jax.random.key(1), state, act)
+    assert state.prev_action[0].tolist() == [1, 2, 1, 1]
+    np.testing.assert_allclose(obs[0, -4:], [1.0, -1.0, 1.0, 1.0])
+    np.testing.assert_allclose(obs[1, -4:], [0.0, 0.0, 0.0, 0.0])

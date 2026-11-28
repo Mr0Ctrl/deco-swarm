@@ -1,7 +1,8 @@
-# SIM_CONTRACT v0
+# SIM_CONTRACT v1
 
-Version: `v0`. Any change to the observation or action layout bumps the version.
+Version: `v1`. Any change to the observation or action layout bumps the version.
 Checkpoints store this version.
+- v0 → v1: rays split into solid / flag / base groups (bases no longer hide agents); previous action added to the observation (916 → 1010).
 
 ## Units and coordinates
 - Meters, seconds, degrees. Pixels exist only in the viewer (`render.camera.pixels_per_meter`).
@@ -31,15 +32,21 @@ Checkpoints store this version.
 
 ## Observation (per agent, egocentric, flat float32 vector)
 1. Rays: `R = agent.perception.ray_count` rays spread over `fov_deg`, centered on the heading.
-   Per ray: `[distance / max_range_m, class one-hot (C = 8), hit_is_carrier]`.
-   Classes: `none, wall, ally, enemy, own_flag, enemy_flag, own_base, enemy_base`.
+   Each ray reports three groups (F = 11 values per ray):
+   - **Solid** (blocks the ray): `[solid_d / max_range_m, wall, ally, enemy, hit_is_carrier]`.
+   - **Flag** (seen only if nothing solid is in front; does not block): `[flag_d / max_range_m, own_flag, opp_flag]`.
+   - **Base** (same rule as flags): `[base_d / max_range_m, own_base, opp_base]`.
+   - No hit in a group: distance = 1.0 and all class bits 0.
+   - A circle (agent, flag, base) is seen only when the ray enters it from outside: an agent inside its own base does not see that base, but sees the flag in it.
+   - A carried flag is not visible; `hit_is_carrier` marks its carrier.
 2. Ego bearings (E = 2): `own_base`, `enemy_flag` (current position, even when carried or stray).
    Each target: `[cos(rel_angle), sin(rel_angle), distance / map_diagonal]`.
 3. Self state (S = 10): `carrying_flag`, `own_flag_state` one-hot (home / carried / stray),
    `enemy_flag_state` one-hot (home / carried / stray), `respawning`, `tag_cooldown / cooldown_s`,
    `time_left / max_steps`.
+4. Previous action (A = 4): `[fwd, left, turn]` in {-1, 0, 1}, `fire` in {0, 1}. Zero after reset.
 
-Size: `R * (1 + C + 1) + 3 * E + S` = 90 * 10 + 6 + 10 = **916**.
+Size: `R * F + 3 * E + S + A` = 90 * 11 + 6 + 10 + 4 = **1010**.
 
 ## Step output
 `obs, state, reward, terminated, truncated, info = env.step(key, state, actions)`
