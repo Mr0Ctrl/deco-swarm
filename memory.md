@@ -45,7 +45,7 @@ _Last updated: 2026-11-28_
   - obs = 90 rays × 10 + 6 ego + 10 self = 916
   - the 4500-step time limit counts as `terminated` (time_left is in obs, the match really ends) → no truncation fix needed in GAE
 - **Phase 0 gate:** passed. Exception: the second laptop (RTX 3070) setup is not verified yet.
-- **Phase 1 started (2026-11-28).** Plan, in order:
+- **Phase 1 started (2026-11-28).** Detailed plan written to `documents/new/faz1_tr.md` at the user's request; follow it in order. Plan:
   - 1.1 kinematics
   - 1.2 collision (wall slide + agent push)
   - 1.3 raycast
@@ -53,7 +53,8 @@ _Last updated: 2026-11-28_
   - 1.5 env (reset/step/obs/auto-reset, MultiAgentEnv-like)
   - 1.6 pygame viewer (needs `pygame` dependency)
   - 1.7 SPS + determinism
-- **1.1 in progress:** Claude gave `sim/kinematics.py` (`decode_actions`, `integrate`) and `tests/test_kinematics.py` (7 tests). Prototype passed 7/7.
+- Phase 0 closed in commit `0361708`. The user approved the faz1 plan decisions (raycast entry rule, laser/respawn deferred to Phase 3, symmetry test, pygame).
+- **1.1 in progress (re-sent 2026-11-28):** Claude gave `sim/kinematics.py` (`decode_actions`, `integrate`) and `tests/test_kinematics.py` (7 tests). Prototype passed 7/7.
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
