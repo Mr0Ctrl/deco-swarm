@@ -59,11 +59,14 @@ _Last updated: 2026-11-28_
 - **1.3 done:** raycast, 48 tests passed, commit `e548afa`. Carried flags are invisible to rays; distances are in meters.
 - **1.4 done:** state + rules, 57 tests passed, commit `b5f6cf0`.
 - **1.5 done:** `CTFEnv`, 63 tests passed, commit `17a98e2`. Reward: zero-sum capture, plus pickup/return, plus win/loss at the end. Symmetry test included.
-- **1.6 in progress:** pygame added by the user. Claude gave three files (prototype passed headless, play script ran 40 frames):
-  - `rendering/viewer.py`: `Viewer` with `to_screen` (y flip), `draw`, ray drawing, HUD.
-  - `scripts/play.py`: keyboard play at 15 Hz decisions. Flags `--map`, `--others idle|random`, `--max-frames`.
-  - `tests/test_viewer.py`: 2 smoke tests with `SDL_VIDEODRIVER=dummy`.
-  - Next: the user plays and checks the manual checklist.
+- **1.6 done:** viewer + play.py, 65 tests passed, commit `3c3fb70`. The user played it and it looks good.
+- **1.7 in progress:** Claude gave `scratch/sps.py` and `tests/test_determinism.py` (2 tests, bit-exact).
+  - Claude measured SPS on the RTX 4060 (ctf_pillars, 128 steps):
+    - 1024 envs: about 0.79M SPS
+    - 4096 envs: about 0.92M SPS (saturated)
+    - 8192 envs: about 0.90M SPS
+  - Lesson: if obs is not used in the output, XLA drops the raycast as dead code and the number is fake (about 7.6M).
+- Next: Phase 1 gate check (SIM_CONTRACT raycast note), then Phase 2.
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
