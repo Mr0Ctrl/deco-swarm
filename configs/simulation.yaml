@@ -1,0 +1,5 @@
+physics:
+  tick_hz: 60.0
+  collision_iterations: 2
+  max_segments: 64
+  max_team_size: 5

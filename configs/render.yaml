@@ -1,0 +1,11 @@
+screen:
+  width_px: 1280
+  height_px: 760
+  fps: 60
+  title: "DECO-SWARM v2 | 2D Capture the Flag"
+
+camera:
+  pixels_per_meter: 20.0   # the only meter -> pixel conversion
+  default_zoom: 0.75
+  min_zoom: 0.2
+  max_zoom: 4.0

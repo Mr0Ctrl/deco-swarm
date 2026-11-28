@@ -1,0 +1,21 @@
+episode:
+  max_steps: 4500          # FTW: 5 min x 15 Hz
+  action_repeat: 4         # FTW: 60 Hz / 4 = 15 Hz decisions
+  team_size: 2             # FTW: 2v2
+  score_limit: null        # FTW: time limit only, draws possible
+
+rules:
+  requires_own_flag_at_home: true   # FTW
+  flag_auto_return_s: 15.0          # not stated in FTW, our choice
+  respawn_s: 2.5                    # not stated in FTW, our choice
+
+rewards:                   # shaping; revisit in Phase 2 (FTW: win/draw/loss + events)
+  capture_reward: 10.0
+  win_reward: 20.0
+  pickup_reward: 1.0
+  return_reward: 1.0
+  tag_reward: 0.5
+  carrier_tag_bonus: 1.0
+  exploration_weight: 0.05
+  cell_size_m: 4.0
+  collision_penalty: -0.02
