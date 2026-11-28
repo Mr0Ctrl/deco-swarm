@@ -37,14 +37,23 @@ _Last updated: 2026-11-28_
 - **Phase 0.7 done (lightweight):** the JaxMARL MAPPO-RNN MPE run works on our GPU. Real VRAM about 1 GB. Return went from -88 to about -47 within 0.8M steps, so it is learning.
   - The user doesn't want to read the source. Claude brings JaxMARL patterns into the code it gives (GAE now; rollout, GRU reset and minibatching in Phase 2).
   - No notes file needed.
-- **Phase 0.8 done:** GAE + 4 tests, `uv run pytest` gives 26 passed. Not committed yet. Claude gave GAE learning resources.
-- **Phase 0.9 in progress:** `documents/SIM_CONTRACT.md` v0 (the user writes it from Claude's draft). Proposed decisions:
+- **Phase 0.8 done:** GAE + 4 tests, `uv run pytest` gives 26 passed. Committed `0af342b`. Claude gave GAE learning resources.
+- **Phase 0.9 done:** `documents/SIM_CONTRACT.md` v0 written (not committed yet). Decisions:
   - +y up, angle CCW from +x (differs from main's +y down)
   - 15 Hz decisions
   - actions are multi-discrete [move 3, strafe 3, turn 3, fire 2]; fire is a no-op while the laser is disabled
   - obs = 90 rays × 10 + 6 ego + 10 self = 916
   - the 4500-step time limit counts as `terminated` (time_left is in obs, the match really ends) → no truncation fix needed in GAE
-- Next: Phase 0 gate check, then Phase 1.
+- **Phase 0 gate:** passed. Exception: the second laptop (RTX 3070) setup is not verified yet.
+- **Phase 1 started (2026-11-28).** Plan, in order:
+  - 1.1 kinematics
+  - 1.2 collision (wall slide + agent push)
+  - 1.3 raycast
+  - 1.4 rules (pickup, capture, stray flag, respawn; no laser)
+  - 1.5 env (reset/step/obs/auto-reset, MultiAgentEnv-like)
+  - 1.6 pygame viewer (needs `pygame` dependency)
+  - 1.7 SPS + determinism
+- **1.1 in progress:** Claude gave `sim/kinematics.py` (`decode_actions`, `integrate`) and `tests/test_kinematics.py` (7 tests). Prototype passed 7/7.
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
