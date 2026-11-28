@@ -504,6 +504,7 @@ dependencies = [
     { name = "jax", extra = ["cuda12"] },
     { name = "numpy" },
     { name = "optax" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -517,6 +518,7 @@ requires-dist = [
     { name = "jax", extras = ["cuda12"], specifier = ">=0.12.1" },
     { name = "numpy" },
     { name = "optax", specifier = ">=0.2.9" },
+    { name = "pyyaml", specifier = ">=6.0.4" },
 ]
 
 [package.metadata.requires-dev]

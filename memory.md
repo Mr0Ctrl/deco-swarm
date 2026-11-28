@@ -29,11 +29,13 @@ _Last updated: 2026-11-28_
 - **Phase 0.4 done (2026-11-28):** we took only the config files from main's layout, converted to meters + FTW.
   - Files: `agent`, `environment`, `simulation`, `render`, `arenas/ctf_open`, `arenas/ctf_pillars`.
   - Claude deleted the old drafts (`game_rules`, `observation`, `rewards`) at the user's request.
-  - **Bug to fix (user):** `render.yaml` holds the ctf_open map content, and `arenas/ctf_open.yaml` holds the old `ctf_open_v0`.
+  - The `render.yaml`/`ctf_open.yaml` swap was fixed by the user.
   - We continue our own path in `src/deco_swarm/` and do NOT adopt main's code.
-- **Phase 0.5 in progress:** strict loader. Claude gave `config/schema.py` (nested frozen dataclasses mirroring the YAML), `config/loader.py` (`load_all`, `require`, `ConfigError`) and `tests/test_config.py` (10 tests). Prototype passed 10/10 in the scratchpad.
-- Next: 0.6 arena compiler (maps → padded PyTree + rotate_180 symmetry check).
-- 0.7 (JaxMARL) can run in parallel.
+- **Phase 0.5 done:** strict loader + 10 tests, `uv run pytest` gives 13 passed. Committed `b102c65`.
+  - `pyyaml` added to pyproject.
+- **Phase 0.6 done:** arena compiler + 9 tests, `uv run pytest` gives 22 passed. Not committed yet (user's call).
+- **Phase 0.7 in progress:** run JaxMARL MAPPO-RNN outside the repo (~/refs/JaxMARL, its own venv). Read it with the focus list Claude gave: env API, auto-reset, scan carry, GRU reset, GAE, minibatch, global state. Measure SPS. Notes go in `documents/notes/jaxmarl_notlari.md` (user writes).
+- Then 0.8 GAE (`training/gae.py`) and 0.9 SIM_CONTRACT.
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
