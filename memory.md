@@ -56,9 +56,10 @@ _Last updated: 2026-11-28_
 - Phase 0 closed in commit `0361708`. The user approved the faz1 plan decisions (raycast entry rule, laser/respawn deferred to Phase 3, symmetry test, pygame).
 - **1.1 done:** kinematics, 33 tests passed, commit `85dcb17`.
 - **1.2 done:** collision, 42 tests passed, commit `3b1b316`.
-- **1.3 in progress:** Claude gave `sim/raycast.py` (`cast_rays`, class constants, ray-segment and ray-circle entry-only checks) and `tests/test_raycast.py` (6 tests, using a 3-ray PerceptionConfig). Prototype passed 6/6.
-  - Carried flags are invisible to rays; the carrier bit marks the carrier.
-  - Distances are returned in meters; the env normalizes them.
+- **1.3 done:** raycast, 48 tests passed, commit `e548afa`. Carried flags are invisible to rays; distances are in meters.
+- **1.4 in progress:** Claude gave `sim/state.py` and `sim/rules.py` + `tests/test_rules.py` (9 tests). Prototype passed 9/9.
+  - `state.py`: `EnvState`, `Events`, HOME/CARRIED/STRAY, `agent_team`, `carrying_mask`, `initial_state`.
+  - `rules.py`: `apply_rules`. Both flags update together. Order: follow → return → pickup → auto-return → capture. Return beats pickup in the same tick.
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
