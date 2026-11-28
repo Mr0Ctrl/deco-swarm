@@ -55,8 +55,10 @@ _Last updated: 2026-11-28_
   - 1.7 SPS + determinism
 - Phase 0 closed in commit `0361708`. The user approved the faz1 plan decisions (raycast entry rule, laser/respawn deferred to Phase 3, symmetry test, pygame).
 - **1.1 done:** kinematics, 33 tests passed, commit `85dcb17`.
-- **1.2 in progress:** Claude gave `sim/collision.py` and `tests/test_collision.py` (9 tests). Prototype passed 9/9.
-  - Functions: `_closest_points`, `push_out_of_walls` (deepest wall per pass), `separate_agents` (half each, index fallback when agents coincide), `collide` (agents first, walls last, `collision_iterations` passes).
+- **1.2 done:** collision, 42 tests passed, commit `3b1b316`.
+- **1.3 in progress:** Claude gave `sim/raycast.py` (`cast_rays`, class constants, ray-segment and ray-circle entry-only checks) and `tests/test_raycast.py` (6 tests, using a 3-ray PerceptionConfig). Prototype passed 6/6.
+  - Carried flags are invisible to rays; the carrier bit marks the carrier.
+  - Distances are returned in meters; the env normalizes them.
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
