@@ -45,43 +45,41 @@ Objective and zone checks use **circle-circle overlap** ($\|\mathbf{c}_{\text{ag
 
 Agents **never receive global `(x, y)` map coordinates**. Global coordinates invite policies to memorize specific map layouts and break completely when spawning on randomized arenas or opposite team sides. Instead, every observation is expressed strictly in the **agent's own body frame**:
 
-### 4.1 Panoramic Semantic Raycasts
+### 4.1 2-Layer Panoramic Semantic Raycasts (`90 × 12`)
 Evenly spaced rays sweep across $[\theta - \text{FOV}/2,\; \theta + \text{FOV}/2]$ (e.g., `90` rays over `180°`). Each ray from origin $\mathbf{o}$ in unit direction $\hat{r}$ with vector $\mathbf{r} = d_{\max}\hat{r}$ solves a **2D parametric ray-segment intersection** against every wall segment $\mathbf{p}_1 \to \mathbf{p}_2$ ($\mathbf{s} = \mathbf{p}_2 - \mathbf{p}_1$):
 
 $$\det = r_x s_y - r_y s_x, \qquad t = \frac{(p_{1,x} - o_x)s_y - (p_{1,y} - o_y)s_x}{\det}, \qquad u = \frac{(p_{1,x} - o_x)r_y - (p_{1,y} - o_y)r_x}{\det}$$
 
-If $|\det| \ge 10^{-8}$ and both $0 \le t \le 1$ and $0 \le u \le 1$, the ray hits the segment at distance $t \cdot d_{\max}$. In multi-agent CTF, the same ray also checks analytic **ray-circle intersections** against allies, enemies, flags, and bases, keeping only the **nearest hit** per ray:
-- **Normalized Depth:** `hit_distance / max_distance` in $[0, 1]$ (`1.0` when nothing is hit).
-- **Semantic Identity Flags:** One-hot / multi-flag indicators identifying what the ray struck (`wall`, `ally`, `enemy`, `objective/flag/base`).
-- **Relative Ray Geometry:** $(\cos \Delta\theta, \sin \Delta\theta)$ encoding the ray's angle relative to the agent's heading so spatial convolutions know where each ray points.
+If $|\det| \ge 10^{-8}$ and both $0 \le t \le 1$ and $0 \le u \le 1$, the ray hits the segment at distance $t \cdot d_{\max}$.
 
-### 4.2 Ego-Polar Reference Bearing
-To give agents a compass toward a known reference point (such as a navigation goal, or in CTF a team's home base / flag zone), the engine computes a 2-float ego-polar vector:
-- **Normalized Distance:** $\min(1,\; \|\mathbf{p}_{\text{target}} - \mathbf{p}_{\text{agent}}\|_2 / \text{diag}_{\text{arena}})$.
-- **Signed Relative Angle:** The shortest angular difference between the target bearing and the agent's heading, wrapped to $[-180^\circ, 180^\circ)$ and divided by $180^\circ$ to lie in $[-1, +1]$ (negative = target is to the left, positive = right, `0` = straight ahead).
+To prevent floor zones (`bases` and `flags`) from blinding the agent to walls or enemies behind them, each ray evaluates **two non-interfering team-relative layers** plus its relative angle (`12` floats per ray):
+- **Solid Layer (`4`):** `[solid_dist, is_wall, is_ally, is_enemy]` — stops only at the nearest solid wall or agent (`1.0` if nothing hit).
+- **Flag Layer (`3`):** `[flag_dist, is_own_flag, is_enemy_flag]` — nearest unoccluded flag along the ray closer than `solid_dist` (`1.0` if none). Carried flags move with their carrier, so `solid_dist` and `flag_dist` align automatically on the same ray.
+- **Base Layer (`3`):** `[base_dist, is_own_base, is_enemy_base]` — nearest unoccluded base pad edge closer than `solid_dist` (`0.0` when standing inside, `1.0` if none).
+- **Ray Angle (`2`):** `[rel_cos, rel_sin]` — $(\cos \Delta\theta, \sin \Delta\theta)$ relative to the agent's heading.
 
-### 4.3 Proprioception & Full Observation Layout
-Completing the observation are low-dimensional scalar signals: current normalized velocities, the previous motor action (helping the recurrent core infer whether a command was blocked by a wall), and agent-specific status vitals (health, cooldowns, or flag-carrying state).
+### 4.2 Ego & HUD Scalars (`9` floats)
+Matching DeepMind FTW's strict POMDP rules, agents receive **zero global GPS coordinates or base compasses** and **no redundant velocity vector** (since 2D kinematics have no inertia). Instead, the ego stream provides `9` compact scalars:
+- **Previous Action (`4`):** `[prev_move_fwd, prev_strafe, prev_rotate, prev_tag]` — lets the recurrent core detect wall stalls and firing state across stochastic samples.
+- **HUD & Match Status (`5`):** `[carrying_flag, own_flag_home, enemy_flag_home, in_own_base, tag_cooldown_norm]`.
 
-In the 640-float baseline layout, all streams pack into a single normalized vector in `[-1.0, 1.0]`:
+### 4.3 Full v2 Observation Summary (`1,089` floats)
 
-| Slice | Shape / Count | Block | Per-Element Content |
-| :--- | :--- | :--- | :--- |
-| `[0 : 630]` | `90 × 7` | **Panoramic Raycasts** | `[norm_dist, is_wall, is_ally, is_enemy, is_objective, rel_cos, rel_sin]` |
-| `[630 : 632]` | `2` | **Ego-Polar Bearing** | `[norm_dist, norm_angle]` |
-| `[632 : 635]` | `3` | **Current Velocity** | `[move_fwd, strafe, rotate_dir]` |
-| `[635 : 638]` | `3` | **Previous Action** | `[prev_move_fwd, prev_strafe, prev_rotate_dir]` |
-| `[638 : 640]` | `2` | **Self Status** | `[norm_health, flag_or_ammo_state]` |
+| Tensor | Shape | Count | Content |
+| :--- | :--- | :---: | :--- |
+| **Panoramic Rays** | `(90, 12)` | `1,080` | Solid (`4`: `dist, wall, ally, enemy`), Flag (`3`: `dist, own, enemy`), Base (`3`: `dist, own, enemy`), Angle (`2`: `cos, sin`) |
+| **Ego & HUD** | `(9,)` | `9` | `prev_action(4)` + `carrying_flag`, `own_flag_home`, `enemy_flag_home`, `in_own_base`, `tag_cooldown_norm` |
 
 ---
 
-## 5. Discrete-to-Continuous Action Mapping
+## 5. Discrete-to-Continuous Action Mapping (`MultiDiscrete([5, 3, 2])`)
 
-Rather than predicting noisy raw continuous torques, the policy outputs **decoupled multi-discrete choices** that map cleanly to the continuous kinematic inputs:
-- **Translation Branch (`5` choices):** Stop `(0, 0)`, Forward `(+1, 0)`, Backward `(-1, 0)`, Strafe Left `(0, -1)`, Strafe Right `(0, +1)`.
-- **Rotation Branch (`3` choices):** Hold `0`, Turn Left `-1`, Turn Right `+1`.
+Following DeepMind FTW's discrete key-press formulation (where `0` means `No-Op` / keys released), the policy outputs three independent categorical branches:
+- **Translation (`5`):** `0: No-Op (0, 0)`, `1: Forward (+1, 0)`, `2: Backward (-1, 0)`, `3: Strafe Left (0, -1)`, `4: Strafe Right (0, +1)`.
+- **Rotation (`3`):** `0: No-Op (0)`, `1: Turn Left (-1)`, `2: Turn Right (+1)`.
+- **Laser Tagger (`2`):** `0: No-Op`, `1: Fire` (1-hit instant forward beam when cooldown is ready).
 
-Decoupling translation from rotation lets an agent combine forward movement or strafing with smooth turning simultaneously without exploding the action space ($5 + 3 = 8$ logits instead of $5 \times 3 = 15$ joint combinations). In Capture the Flag, tactical actions (such as tagging/dash or emitting a communication signal) simply attach as additional parallel heads.
+Decoupling translation, rotation, and firing lets an agent strafe, aim, and fire simultaneously with only $5 + 3 + 2 = 10$ logits instead of $30$ joint combinations. In **Phase 3 / Stage 3**, a continuous communication head $m_t \in [-1, 1]^8$ runs in parallel.
 
 ---
 

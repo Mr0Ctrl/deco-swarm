@@ -22,15 +22,14 @@ flowchart TD
     GRU --> CRIT["Value Head V(s) / CTDE Critic"]
 ```
 
-### Key Architectural Properties & Baseline Dimensions
-- **Spatial Stream (1D-CNN):** Treats the ordered `(90, 7)` panoramic rays as a 1D scan: `Conv1d(7→32, k=5, s=2, p=2) → ReLU → Conv1d(32→64, k=3, s=2, p=1) → ReLU → AdaptiveAvgPool1d(8) → Flatten(512) → Linear(512→128) → ReLU`. This detects openings, corners, and spotted entities regardless of their angle in the field of view.
-- **Ego Stream (MLP Adapter):** Projects the `10` scalar bearings, velocities, previous action, and status vitals via `Linear(10→32) → ReLU → Linear(32→32) → ReLU`.
-- **Recurrent Belief Core (GRU):** Concatenates the spatial and ego embeddings (`128 + 32 = 160`) with the previous hidden state $h_{t-1}$ into a `GRU(160→128)` cell to output $h_t \in \mathbb{R}^{128}$. This gives the agent short-term spatial memory to escape dead-ends, remember occluded obstacles, and track opponents that leave its 180° cone.
-- **Actor & Critic Heads:** Two `Linear(128→64) → ReLU` backbones branch into multi-discrete policy logits (`move: 5`, `rotate: 3`) and scalar value $V(s)$ (`Linear(64→1)`).
-- **Multi-Agent Extension (v2 CTF + Communication):** Because encoders and heads interact through clean latent adapters, adding multi-agent communication requires **no redesign of the core**:
-  - An **attention or pooling branch** aggregates incoming messages from an arbitrary number of teammates, keeping the policy **team-size invariant** (train on 2v2/3v3, generalize to 5v5).
-  - A **communication head** emits a compact message vector alongside the motor actions.
-  - During training, a **Centralized Critic (CTDE)** can condition on global arena state (all agent poses, flag positions, and cooldowns) to stabilize advantage estimation while deployed actors remain 100% decentralized.
+### Key Architectural Properties & v2 Dimensions
+- **Spatial Stream (1D-CNN):** Treats the ordered `(90, 12)` panoramic rays as a 1D scan: `Conv1d(12→32, k=5, s=2, p=2) → ReLU → Conv1d(32→64, k=3, s=2, p=1) → ReLU → AdaptiveAvgPool1d(8) → Flatten(512) → Linear(512→128) → ReLU`. This detects walls, corridors, allies, enemies, flags, and bases in the exact same spatial alignment.
+- **Ego Stream (MLP Adapter):** Projects the `9` scalar HUD & previous-action signals via `Linear(9→32) → ReLU → Linear(32→32) → ReLU`.
+- **Teammate Communication Stream (Phase 3 / Stage 3):** Aggregates incoming messages `(K, 8)` from `K` living teammates via permutation-invariant **Attention / Mean-Max Pooling → `Linear(→32) → ReLU`**, keeping the policy invariant across `2v2`, `3v3`, and `5v5`.
+- **Recurrent Belief Core (GRU):** Concatenates the spatial, ego, and comms embeddings (`128 + 32 + 32 = 192`) with the previous hidden state $h_{t-1}$ into a `GRU(192→128)` cell to output $h_t \in \mathbb{R}^{128}$. This gives the agent spatial memory to navigate without a base GPS and track opponents outside its 180° cone.
+- **Actor & Separate CTDE Critic Heads:**
+  - **Actor (`Linear(128→64) → ReLU`):** Branches into `move(5)`, `rotate(3)`, `tag(2)`, and continuous `comm_out(8)` ($\tanh \in [-1, 1]^8$).
+  - **Critic (Training Only):** A separate centralized value head `V(s)` conditioned on global arena state during CTDE MAPPO training, turned off during decentralized evaluation/deployment.
 
 ---
 

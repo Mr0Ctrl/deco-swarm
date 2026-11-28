@@ -50,10 +50,13 @@ $$R_t = r_{\text{progress}} + r_{\text{exploration}} + r_{\text{collision}} + r_
 ### Episode Telemetry Contract
 Every step exposes structured diagnostics in `info` for logging and curriculum tracking: `is_success`, `step_count`, `dist_to_goal`, `collided`, `explored_cells`, `map_name`, and a per-component `reward_breakdown` (`progress`, `time`, `collision`, `exploration`, `terminal`).
 
-### Extending to v2 Capture the Flag (CTF)
-In multi-agent CTF (2v2, 3v3, and 5v5), the same shaping philosophy governs team competition:
-- **Core Game Rules:** Each team defends its home base and flag pedestal. An agent picks up the enemy flag by entering its radius, carries it back to its own home base to score, and can be **tagged** by opponents (dropping the flag and triggering a brief respawn cooldown).
-- **Zero-Sum Team + Individual Shaping:** Sparse team rewards for **flag capture** and **match victory/defeat** are paired with lightweight individual shaping for **flag pickup**, **tagging an enemy flag-carrier**, and **spatial exploration**—so agents learn coordinated offense, defense, and callouts without selfish reward hacking.
+### Extending to v2 Capture the Flag (DeepMind FTW Rules)
+In multi-agent CTF (`2v2`, `3v3`, and `5v5`), gameplay follows DeepMind FTW's ruleset adapted to 2D:
+- **Flag Pickup & Scoring:** Touching the enemy flag picks it up. Carrying it back to your own base scores **1 point**, **only while your own team's flag is safely at your base**.
+- **1-Hit Laser Tagging & Respawn:** Firing the forward laser beam (`~0.8 s` cooldown) tags any hit opponent in 1 hit, dropping any flag they carried on the spot and respawning them at their team's base after a `2–3 s` cooldown.
+- **Flag Returns:** A teammate touching your dropped flag **instantly returns** it to base; untouched dropped flags auto-return after `15 s`.
+- **Match Horizon:** `180 s` (`1,800` decision steps at `10 Hz`) or first team to **3 captures**.
+- **Zero-Sum Team + Individual Shaping:** Sparse team rewards for **flag capture** and **match victory/defeat** are paired with lightweight individual shaping for **flag pickup**, **tagging an opponent / carrier**, **returning a dropped flag**, and **spatial exploration**.
 
 ---
 
