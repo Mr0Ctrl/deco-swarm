@@ -51,7 +51,7 @@ def test_dead_agent_does_not_move():
 
 
 def test_jit_and_vmap():
-    B, N = 8, 4                                  # 8 envs, 4 agents
+    B, N = 8, 4  # 8 envs, 4 agents
     pos = jnp.zeros((B, N, 2))
     heading = jnp.zeros((B, N))
     actions = jnp.ones((B, N, 4), jnp.int32)

@@ -54,7 +54,9 @@ _Last updated: 2026-11-28_
   - 1.6 pygame viewer (needs `pygame` dependency)
   - 1.7 SPS + determinism
 - Phase 0 closed in commit `0361708`. The user approved the faz1 plan decisions (raycast entry rule, laser/respawn deferred to Phase 3, symmetry test, pygame).
-- **1.1 in progress (re-sent 2026-11-28):** Claude gave `sim/kinematics.py` (`decode_actions`, `integrate`) and `tests/test_kinematics.py` (7 tests). Prototype passed 7/7.
+- **1.1 done:** kinematics, 33 tests passed, commit `85dcb17`.
+- **1.2 in progress:** Claude gave `sim/collision.py` and `tests/test_collision.py` (9 tests). Prototype passed 9/9.
+  - Functions: `_closest_points`, `push_out_of_walls` (deepest wall per pass), `separate_agents` (half each, index fallback when agents coincide), `collide` (agents first, walls last, `collision_iterations` passes).
 
 ## Working rules
 - The user does everything (code, files, git). Claude explains, reviews and answers, and acts only on explicit requests. This file is the one exception.
