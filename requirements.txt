@@ -1,0 +1,8 @@
+jax[cuda12]>=0.4.30
+flax>=0.10.0
+optax>=0.2.3
+orbax-checkpoint>=0.6.0
+pyyaml>=6.0
+numpy>=1.26.0
+pygame>=2.6.0
+pytest>=8.0.0
