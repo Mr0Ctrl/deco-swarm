@@ -220,3 +220,7 @@ __marimo__/
 # RL Checkpoints
 checkpoints/*
 references/*
+
+# Custom
+scratch/
+.vscode/
